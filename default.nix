@@ -31,6 +31,9 @@ in
       black
       nixpkgs.python36Packages.tkinter
       pypkgs.ipywidgets
+      pypkgs.appdirs
+      pypkgs.click
+      toml
     ];
     src=./.;
     catchConflicts=false;
