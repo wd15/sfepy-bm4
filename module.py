@@ -21,7 +21,7 @@ from sfepy.solvers.nls import Newton
 import sfepy.discrete.fem.periodic as per
 from sfepy.discrete import Functions
 from sfepy.mesh.mesh_generators import gen_block_mesh
-from sfepy.mechanics.matcoefs import ElasticConstants
+from sfepy.mechanics.matcoefs import lame_from_youngpoisson
 from sfepy.base.base import output
 from sfepy.discrete.conditions import LinearCombinationBC
 
@@ -29,213 +29,29 @@ goptions['verbose'] = False
 output.set_output(quiet=True)
 
 
+def stiffness_material(calc_stiffness):
+    def _material_func_(ts, coors, mode=None, **kwargs):
+        if mode == 'qp':
+            return {'D': calc_stiffness(coors)}
+        else:
+            return
+
+    return Material(
+        'm',
+        function=Function('material_func', _material_func_)
+    )
+
+
 class ElasticFESimulation(object):
-
-    """
-    Use SfePy to solve a linear strain problem in 2D with a varying
-    microstructure on a rectangular grid. The rectangle (cube) is held
-    at the negative edge (plane) and displaced by 1 on the positive x
-    edge (plane). Periodic boundary conditions are applied to the
-    other boundaries.
-
-    The microstructure is of shape (n_samples, n_x, n_y) or (n_samples, n_x,
-    n_y, n_z).
-
-    >>> X = np.zeros((1, 3, 3), dtype=int)
-    >>> X[0, :, 1] = 1
-
-    >>> sim = ElasticFESimulation(elastic_modulus=(1.0, 10.0),
-    ...                           poissons_ratio=(0., 0.))
-    >>> sim.run(X)
-    >>> y = sim.strain
-
-    y is the strain with components as follows
-
-    >>> exx = y[..., 0]
-    >>> eyy = y[..., 1]
-    >>> exy = y[..., 2]
-
-    In this example, the strain is only in the x-direction and has a
-    uniform value of 1 since the displacement is always 1 and the size
-    of the domain is 1.
-
-    >>> assert np.allclose(exx, 1)
-    >>> assert np.allclose(eyy, 0)
-    >>> assert np.allclose(exy, 0)
-
-    The following example is for a system with contrast. It tests the
-    left/right periodic offset and the top/bottom periodicity.
-
-    >>> X = np.array([[[1, 0, 0, 1],
-    ...                [0, 1, 1, 1],
-    ...                [0, 0, 1, 1],
-    ...                [1, 0, 0, 1]]])
-    >>> n_samples, N, N = X.shape
-    >>> macro_strain = 0.1
-    >>> sim = ElasticFESimulation((10.0,1.0), (0.3,0.3), macro_strain=0.1)
-    >>> sim.run(X)
-    >>> u = sim.displacement[0]
-
-    Check that the offset for the left/right planes is `N *
-    macro_strain`.
-
-    >>> assert np.allclose(u[-1,:,0] - u[0,:,0], N * macro_strain)
-
-    Check that the left/right side planes are periodic in y.
-
-    >>> assert np.allclose(u[0,:,1], u[-1,:,1])
-
-    Check that the top/bottom planes are periodic in both x and y.
-
-    >>> assert np.allclose(u[:,0], u[:,-1])
-
-    """
-
-    def __init__(self, elastic_modulus, poissons_ratio, macro_strain=1.,):
-        """Instantiate a ElasticFESimulation.
-
-        Args:
-            elastic_modulus (1D array): array of elastic moduli for phases
-            poissons_ratio (1D array): array of Possion's ratios for phases
-            macro_strain (float, optional): Scalar for macroscopic strain
-
-        """
+    def __init__(self, macro_strain=1.,):
         self.macro_strain = macro_strain
         self.dx = 1.0
-        self.elastic_modulus = elastic_modulus
-        self.poissons_ratio = poissons_ratio
-        if len(elastic_modulus) != len(poissons_ratio):
-            raise RuntimeError(
-                'elastic_modulus and poissons_ratio must be the same length')
 
-    def _convert_properties(self, dim):
-        """
-        Convert from elastic modulus and Poisson's ratio to the Lame
-        parameter and shear modulus
 
-        >>> model = ElasticFESimulation(elastic_modulus=(1., 2.),
-        ...                             poissons_ratio=(1., 1.))
-        >>> result = model._convert_properties(2)
-        >>> answer = np.array([[-0.5, 1. / 6.], [-1., 1. / 3.]])
-        >>> assert(np.allclose(result, answer))
-
-        Args:
-            dim (int): Scalar value for the dimension of the microstructure.
-
-        Returns:
-            array with the Lame parameter and the shear modulus for each phase.
-
-        """
-        def _convert(E, nu):
-            ec = ElasticConstants(young=E, poisson=nu)
-            mu = dim / 3. * ec.mu  # pylint: disable=no-member
-            lame = ec.lam  # pylint: disable=no-member
-            return lame, mu
-
-        return np.array([_convert(E, nu) for E,
-                         nu in zip(self.elastic_modulus, self.poissons_ratio)])
-
-    def _get_property_array(self, X):
-        """
-        Generate property array with elastic_modulus and poissons_ratio for
-        each phase.
-
-        Test case for 2D with 3 phases.
-
-        >>> X2D = np.array([[[0, 1, 2, 1],
-        ...                  [2, 1, 0, 0],
-        ...                  [1, 0, 2, 2]]])
-        >>> model2D = ElasticFESimulation(elastic_modulus=(1., 2., 3.),
-        ...                               poissons_ratio=(1., 1., 1.))
-        >>> lame = lame0, lame1, lame2 = -0.5, -1., -1.5
-        >>> mu = mu0, mu1, mu2 = 1. / 6, 1. / 3, 1. / 2
-        >>> lm = list(zip(lame, mu))
-        >>> X2D_property = np.array([[lm[0], lm[1], lm[2], lm[1]],
-        ...                          [lm[2], lm[1], lm[0], lm[0]],
-        ...                          [lm[1], lm[0], lm[2], lm[2]]])
-
-        >>> assert(np.allclose(model2D._get_property_array(X2D), X2D_property))
-
-        Test case for 3D with 2 phases.
-
-        >>> model3D = ElasticFESimulation(elastic_modulus=(1., 2.),
-        ...                               poissons_ratio=(1., 1.))
-        >>> X3D = np.array([[[0, 1],
-        ...                  [0, 0]],
-        ...                 [[1, 1],
-        ...                  [0, 1]]])
-        >>> X3D_property = np.array([[[lm[0], lm[1]],
-        ...                           [lm[0], lm[0]]],
-        ...                          [[lm[1], lm[1]],
-        ...                           [lm[0], lm[1]]]])
-        >>> assert(np.allclose(model3D._get_property_array(X3D), X3D_property))
-
-        """
-        dim = len(X.shape) - 1
-        n_phases = len(self.elastic_modulus)
-        if not issubclass(X.dtype.type, np.integer):
-            raise TypeError("X must be an integer array")
-        if np.max(X) >= n_phases or np.min(X) < 0:
-            raise RuntimeError(
-                "X must be between 0 and {N}.".format(N=n_phases - 1))
-        if not (2 <= dim <= 3):
-            raise RuntimeError("the shape of X is incorrect")
-        return self._convert_properties(dim)[X]
-
-    def run(self, X):
-        """
-        Run the simulation.
-
-        Args:
-          X (ND array): microstructure with shape (n_samples, n_x, ...)
-        """
-        X_property = self._get_property_array(X)
-        strain = []
-        displacement = []
-        stress = []
-        for x in X_property:
-            strain_, displacement_, stress_ = self._solve(x)
-            strain.append(strain_)
-            displacement.append(displacement_)
-            stress.append(stress_)
-        self.strain = np.array(strain)
-        self.displacement = np.array(displacement)
-        self.stress = np.array(stress)
-
-    @property
-    def response(self):
-        return self.strain[..., 0]
-
-    def _get_material(self, property_array, domain):
-        """
-        Creates an SfePy material from the material property fields for the
-        quadrature points.
-
-        Args:
-          property_array: array of the properties with shape (n_x, n_y, n_z, 2)
-
-        Returns:
-          an SfePy material
-
-        """
-        min_xyz = domain.get_mesh_bounding_box()[0]
-        dims = domain.get_mesh_bounding_box().shape[1]
-
+    def _get_material(self, calc_stiffness):
         def _material_func_(ts, coors, mode=None, **kwargs):
             if mode == 'qp':
-                ijk_out = np.empty_like(coors, dtype=int)
-                ijk = np.floor((coors - min_xyz[None]) / self.dx,
-                               ijk_out, casting="unsafe")
-                ijk_tuple = tuple(ijk.swapaxes(0, 1))
-                property_array_qp = property_array[ijk_tuple]
-                lam = property_array_qp[..., 0]
-                mu = property_array_qp[..., 1]
-
-                from sfepy.mechanics.matcoefs import stiffness_from_lame
-                stiffness = stiffness_from_lame(dims, lam=lam, mu=mu)
-                lam = np.ascontiguousarray(lam.reshape((lam.shape[0], 1, 1)))
-                mu = np.ascontiguousarray(mu.reshape((mu.shape[0], 1, 1)))
-                return {'lam': lam, 'mu': mu, 'D': stiffness}
+                return {'D': calc_stiffness(coors)}
             else:
                 return
 
@@ -478,21 +294,7 @@ class ElasticFESimulation(object):
                         match='match_{0}_plane'.format(dim_string))
         return bc, match_plane
 
-    def _solve(self, property_array):
-        """
-        Solve the Sfepy problem for one sample.
-
-        Args:
-          property_array: array of shape (n_x, n_y, 2) where the last
-          index is for Lame's parameter and shear modulus,
-          respectively.
-
-        Returns:
-          the strain field of shape (n_x, n_y, 2) where the last
-          index represents the x and y displacements
-
-        """
-        shape = property_array.shape[:-1]
+    def run(self, calc_stiffness, shape):
         mesh = self._get_mesh(shape)
         domain = Domain('domain', mesh)
 
@@ -504,11 +306,11 @@ class ElasticFESimulation(object):
         u = FieldVariable('u', 'unknown', field)
         v = FieldVariable('v', 'test', field, primary_var_name='u')
 
-        m = self._get_material(property_array, domain)
+        m = stiffness_material(calc_stiffness)
 
         integral = Integral('i', order=4)
 
-        t1 = Term.new('dw_lin_elastic_iso(m.lam, m.mu, v, u)',
+        t1 = Term.new('dw_lin_elastic(m.D, v, u)',
                       integral, region_all, m=m, v=v, u=u)
         eq = Equation('balance_of_forces', t1)
         eqs = Equations([eq])
