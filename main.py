@@ -14,7 +14,7 @@ def calc_eta(coords, delta=1.0, radius=2.5):
     the circle and 0 outside.
 
     Args:
-      coords: x-y coordinates
+      coords: the Sfepy coordinate array
       delta: interface width
       radius: radius of the circle
 
@@ -29,13 +29,14 @@ def calc_eta(coords, delta=1.0, radius=2.5):
 
 
 def calc_h(eta):
-    """Calculation the interpolation function
+    """Calculate the interpolation function
 
     Args:
       eta: the phase field
 
     Returns:
       the value of h
+
     """
     return eta ** 3 * (6 * eta ** 2 - 15 * eta + 10)
 
@@ -57,14 +58,36 @@ def stiffness_matrix(c11=250, c12=150, c44=100):
 def calc_stiffness(coords):
     """Total stiffness tensor
 
+    3 x 3 Stiffness matrix for Sfepy
+
     Args:
-      coords: space coordinates
+      coords: the Sfepy coordinate array
 
     Returns:
-      3 x 3 stiffness tensor
+      n x 3 x 3 stiffness tensor
     """
     return (
         stiffness_matrix()[None] * (1 + 0.1 * calc_h(calc_eta(coords)))[:, None, None]
+    )
+
+
+def calc_prestress(coords, epsilon=0.005):
+    """Calculate the prestress
+
+    Calculate -h(eta) * [ C_ijkl(eta) * epsilonT_kl ]
+
+    Note that C_1211, C_1222, C_2111 and C_2122 are zero.
+
+    Args:
+      coords: the Sfepy coordinate array
+
+    Returns:
+      n x 3 x 1 stress tensor
+    """
+    return pipe(
+        np.dot(calc_stiffness(coords), [epsilon, epsilon, 0]),
+        lambda x: -calc_eta(coords)[:, None] * x,
+        lambda x: np.ascontiguousarray(x[:, :, None]),
     )
 
 
@@ -77,7 +100,9 @@ def main(shape):
     Returns:
       tuple of strain, displacement and stress
     """
-    return ElasticFESimulation(macro_strain=0.1).run(calc_stiffness, shape)
+    return ElasticFESimulation(macro_strain=0.1).run(
+        calc_stiffness, calc_prestress, shape
+    )
 
 
 def test():

@@ -14,14 +14,13 @@ except ImportError:
     from sfepy.discrete.fem import Domain
 from sfepy.discrete import (FieldVariable, Material, Integral, Function,
                             Equation, Equations, Problem)
-from sfepy.terms import Term
+from sfepy.terms import Term, Terms
 from sfepy.discrete.conditions import Conditions, EssentialBC, PeriodicBC
 from sfepy.solvers.ls import ScipyDirect
 from sfepy.solvers.nls import Newton
 import sfepy.discrete.fem.periodic as per
 from sfepy.discrete import Functions
 from sfepy.mesh.mesh_generators import gen_block_mesh
-from sfepy.mechanics.matcoefs import lame_from_youngpoisson
 from sfepy.base.base import output
 from sfepy.discrete.conditions import LinearCombinationBC
 
@@ -29,34 +28,11 @@ goptions['verbose'] = False
 output.set_output(quiet=True)
 
 
-def stiffness_material(calc_stiffness):
-    def _material_func_(ts, coors, mode=None, **kwargs):
-        if mode == 'qp':
-            return {'D': calc_stiffness(coors)}
-        else:
-            return
-
-    return Material(
-        'm',
-        function=Function('material_func', _material_func_)
-    )
-
-
 class ElasticFESimulation(object):
     def __init__(self, macro_strain=1.,):
         self.macro_strain = macro_strain
         self.dx = 1.0
 
-
-    def _get_material(self, calc_stiffness):
-        def _material_func_(ts, coors, mode=None, **kwargs):
-            if mode == 'qp':
-                return {'D': calc_stiffness(coors)}
-            else:
-                return
-
-        material_func = Function('material_func', _material_func_)
-        return Material('m', function=material_func)
 
     def _subdomain_func(self, x=(), y=(), z=(), max_x=None):
         """
@@ -294,7 +270,7 @@ class ElasticFESimulation(object):
                         match='match_{0}_plane'.format(dim_string))
         return bc, match_plane
 
-    def run(self, calc_stiffness, shape):
+    def run(self, calc_stiffness, calc_prestress, shape):
         mesh = self._get_mesh(shape)
         domain = Domain('domain', mesh)
 
@@ -306,13 +282,29 @@ class ElasticFESimulation(object):
         u = FieldVariable('u', 'unknown', field)
         v = FieldVariable('v', 'test', field, primary_var_name='u')
 
-        m = stiffness_material(calc_stiffness)
+        def _material_func_(_, coors, mode=None, **kwargs):
+            if mode == 'qp':
+                return dict(
+                    D=calc_stiffness(coors),
+                    stress=calc_prestress(coors)
+                )
+            else:
+                return
+
+        m = Material(
+            'm',
+            function=Function('material_func', _material_func_)
+        )
 
         integral = Integral('i', order=4)
 
         t1 = Term.new('dw_lin_elastic(m.D, v, u)',
                       integral, region_all, m=m, v=v, u=u)
-        eq = Equation('balance_of_forces', t1)
+
+        t2 = Term.new('dw_lin_prestress(m.stress, v)',
+                      integral, region_all, m=m, v=v)
+
+        eq = Equation('balance_of_forces', Terms([t1, t2]))
         eqs = Equations([eq])
 
         epbcs, functions = self._get_periodicBCs(domain)
@@ -329,10 +321,7 @@ class ElasticFESimulation(object):
         nls = Newton({}, lin_solver=ls,
                      fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix)
 
-        try:
-            pb.set_solvers_instances(ls, nls)
-        except AttributeError:
-            pb.set_solver(nls)
+        pb.set_solver(nls)
 
         vec = pb.solve()
 
