@@ -109,12 +109,22 @@ def test():
     """Run some tests
     """
     _, displacement, _ = main((10, 10))
-    macro_strain = 0.1
-    assert np.allclose(
-        displacement[-1, :, 0] - displacement[0, :, 0], 10 * macro_strain
-    )
-    assert np.allclose(displacement[0, :, 1], displacement[-1, :, 1])
-    assert np.allclose(displacement[:, 0], displacement[:, -1])
+
+
+    import matplotlib.pyplot as plt
+    displacement = displacement.swapaxes(0, 1) # axes are flipped incorrectly for matplotlib viewing
+    # plt.imshow(np.sqrt(displacement[:, :, 0]**2 + displacement[:, :, 1]**2))
+    plt.imshow(displacement[:, :, 1])
+    plt.colorbar()
+    plt.show()
+
+
+    # macro_strain = 0.1
+    # assert np.allclose(
+    #     displacement[-1, :, 0] - displacement[0, :, 0], 10 * macro_strain
+    # )
+    # assert np.allclose(displacement[0, :, 1], displacement[-1, :, 1])
+    # assert np.allclose(displacement[:, 0], displacement[:, -1])
 
 
 if __name__ == "__main__":
