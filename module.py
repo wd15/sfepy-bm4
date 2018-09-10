@@ -50,7 +50,7 @@ def subdomain(i_x, domain_, eps, coords, domain=None):
         )
 
 
-def make_fixed_bc(domain, dx, index, cond):
+def get_bc(domain, dx, index, cond):
     return pipe(
         Function('fix_points', subdomain(index, domain, dx * 1e-3)),
         lambda x: domain.create_region(
@@ -63,43 +63,18 @@ def make_fixed_bc(domain, dx, index, cond):
     )
 
 
-def get_fixed_displacements_y(domain, dx):
-    return make_fixed_bc(domain, dx, 0, {'u.1': 0.0})
-
-
-def get_fixed_displacements_x(domain, dx):
-    return make_fixed_bc(domain, dx, 1, {'u.0': 0.0})
+def get_bcs(domain, dx):
+    return Conditions([get_bc(domain, dx, 1, {'u.0': 0.0}),
+                       get_bc(domain, dx, 0, {'u.1': 0.0})])
 
 
 class ElasticFESimulation(object):
-    def __init__(self, macro_strain=1.,):
-        self.macro_strain = macro_strain
-        self.dx = 1.0
-
-    def _get_mesh(self, shape):
-        """
-        Generate an Sfepy rectangular mesh
-
-        Args:
-          shape: proposed shape of domain (vertex shape) (n_x, n_y)
-
-        Returns:
-          Sfepy mesh
-
-        """
-        center = np.zeros_like(shape)
-        return gen_block_mesh(shape, np.array(shape) + 1, center,
-                              verbose=False)
-
-    def _get_displacementBCs(self, domain):
-        test_BC_x = get_fixed_displacements_x(domain, self.dx)
-        test_BC_y = get_fixed_displacements_y(domain, self.dx)
-        return Conditions([test_BC_x, test_BC_y])
-
-
-    def run(self, calc_stiffness, calc_prestress, shape):
-        mesh = self._get_mesh(shape)
-        domain = Domain('domain', mesh)
+    def run(self, calc_stiffness, calc_prestress, shape, dx=1.0):
+        domain = pipe(
+            np.array(shape),
+            lambda x: gen_block_mesh(x * dx, x + 1, np.zeros_like(shape), verbose=False),
+            lambda x: Domain('domain', x)
+        )
 
         region_all = domain.create_region('region_all', 'all')
 
@@ -134,8 +109,7 @@ class ElasticFESimulation(object):
         eq = Equation('balance_of_forces', Terms([t1, t2]))
         eqs = Equations([eq])
 
-
-        ebcs = self._get_displacementBCs(domain)
+        ebcs = get_bcs(domain, dx)
 
         ls = ScipyDirect({})
 

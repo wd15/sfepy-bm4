@@ -100,7 +100,7 @@ def calc_prestress(calc_eta_func, coords, epsilon=0.005):
     )
 
 
-def main(shape):
+def main(shape, dx):
     """Run the calculation
 
     Args:
@@ -109,23 +109,24 @@ def main(shape):
     Returns:
       tuple of strain, displacement and stress
     """
-    calc_eta_func = calc_eta(radius=shape[0] / 4.)
-    return ElasticFESimulation(macro_strain=0.1).run(
-        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape
+    calc_eta_func = calc_eta(delta=dx, radius=shape[0] * dx / 4.)
+    return ElasticFESimulation().run(
+        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, dx=dx
     )
 
 
 def test():
     """Run some tests
     """
-    assert np.allclose(main((10, 10))[1][0, 0], [-0.00515589, -0.00515589])
+    assert np.allclose(main((10, 10), 1.0)[1][0, 0], [-0.00515589, -0.00515589])
+    assert np.allclose(main((10, 10), 0.1)[1][0, 0], [-0.00051559, -0.00051559])
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     pipe(
-        main((50, 50))[1],
+        main((50, 50), 0.1)[1],
         lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
         do(plt.imshow),
     )
