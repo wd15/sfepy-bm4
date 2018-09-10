@@ -125,28 +125,27 @@ def get_terms(u, v, calc_stiffness, calc_prestress):
     )
 
 
+def get_nls(ev):
+    return Newton(
+        {}, lin_solver=ScipyDirect({}), fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix
+    )
+
+
 def get_problem(u, v, calc_stiffness, calc_prestress, dx):
     return pipe(
         get_terms(u, v, calc_stiffness, calc_prestress),
         lambda x: Equation("balance_of_forces", Terms([x[0], x[1]])),
         lambda x: Problem("elasticity", equations=Equations([x])),
-        do(lambda x: x.time_update(ebcs=get_bcs(v.field.region.domain, dx)))
+        do(lambda x: x.time_update(ebcs=get_bcs(v.field.region.domain, dx))),
+        do(lambda x: x.set_solver(get_nls(x.get_evaluator())))
     )
 
 
 def solve(calc_stiffness, calc_prestress, shape, dx=1.0):
-    u, v = get_uv(shape, dx)
-
-    pb = get_problem(u, v, calc_stiffness, calc_prestress, dx)
-
-    ls = ScipyDirect({})
-
-    ev = pb.get_evaluator()
-    nls = Newton(
-        {}, lin_solver=ls, fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix
+    pb = pipe(
+        get_uv(shape, dx),
+        lambda x: get_problem(x[0], x[1], calc_stiffness, calc_prestress, dx)
     )
-
-    pb.set_solver(nls)
 
     vec = pb.solve()
 
@@ -154,7 +153,8 @@ def solve(calc_stiffness, calc_prestress, shape, dx=1.0):
 
     u_reshape = np.reshape(u, (tuple(x + 1 for x in shape) + u.shape[-1:]))
 
-    dims = v.field.domain.get_mesh_bounding_box().shape[1]
+    dims = len(shape) #v.field.domain.get_mesh_bounding_box().shape[1]
+
     strain = np.squeeze(
         pb.evaluate(
             "ev_cauchy_strain.{dim}.region_all(u)".format(dim=dims),
