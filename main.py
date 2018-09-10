@@ -4,7 +4,7 @@
 # pylint: disable=no-value-for-parameter
 
 import numpy as np
-from toolz.curried import pipe, curry
+from toolz.curried import pipe, curry, do
 
 from module import ElasticFESimulation
 
@@ -122,14 +122,12 @@ def test():
 
 
 if __name__ == "__main__":
-    _, displacement, _ = main((50, 50))
-
     import matplotlib.pyplot as plt
 
-    displacement = displacement.swapaxes(
-        0, 1
-    )  # axes are flipped incorrectly for matplotlib viewing
-    plt.imshow(np.sqrt(displacement[:, :, 0] ** 2 + displacement[:, :, 1] ** 2))
-    # plt.imshow(displacement[:, :, 1])
+    pipe(
+        main((50, 50))[1],
+        lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
+        do(plt.imshow),
+    )
     plt.colorbar()
     plt.show()
