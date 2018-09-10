@@ -1,12 +1,15 @@
 """Solve PFHub's benchmark 4
 """
 
+# pylint: disable=no-value-for-parameter
+
 import numpy as np
-from toolz.curried import pipe
+from toolz.curried import pipe, curry
 
 from module import ElasticFESimulation
 
 
+@curry
 def calc_eta(coords, delta=1.0, radius=2.5):
     """Calculate a fake phase field for testing
 
@@ -55,23 +58,27 @@ def stiffness_matrix(c11=250, c12=150, c44=100):
     return np.array([[c11, c12, 0], [c12, c11, 0], [0, 0, c44]])
 
 
-def calc_stiffness(coords):
+@curry
+def calc_stiffness(calc_eta_func, coords):
     """Total stiffness tensor
 
     3 x 3 Stiffness matrix for Sfepy
 
     Args:
+      calc_eta_func: function to calculate the phase field
       coords: the Sfepy coordinate array
 
     Returns:
       n x 3 x 3 stiffness tensor
     """
     return (
-        stiffness_matrix()[None] * (1 + 0.1 * calc_h(calc_eta(coords)))[:, None, None]
+        stiffness_matrix()[None]
+        * (1 + 0.1 * calc_h(calc_eta_func(coords)))[:, None, None]
     )
 
 
-def calc_prestress(coords, epsilon=0.005):
+@curry
+def calc_prestress(calc_eta_func, coords, epsilon=0.005):
     """Calculate the prestress
 
     Calculate -h(eta) * [ C_ijkl(eta) * epsilonT_kl ]
@@ -79,14 +86,16 @@ def calc_prestress(coords, epsilon=0.005):
     Note that C_1211, C_1222, C_2111 and C_2122 are zero.
 
     Args:
+      calc_eta_func: function to calculate the phase field
       coords: the Sfepy coordinate array
+      epsilon: the misfit strain
 
     Returns:
       n x 3 x 1 stress tensor
     """
     return pipe(
-        np.dot(calc_stiffness(coords), [epsilon, epsilon, 0]),
-        lambda x: -calc_eta(coords)[:, None] * x,
+        np.dot(calc_stiffness(calc_eta_func, coords), [epsilon, epsilon, 0]),
+        lambda x: -calc_eta_func(coords)[:, None] * x,
         lambda x: np.ascontiguousarray(x[:, :, None]),
     )
 
@@ -100,32 +109,27 @@ def main(shape):
     Returns:
       tuple of strain, displacement and stress
     """
+    calc_eta_func = calc_eta(radius=shape[0] / 4.)
     return ElasticFESimulation(macro_strain=0.1).run(
-        calc_stiffness, calc_prestress, shape
+        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape
     )
 
 
 def test():
     """Run some tests
     """
-    _, displacement, _ = main((10, 10))
-
-
-    import matplotlib.pyplot as plt
-    displacement = displacement.swapaxes(0, 1) # axes are flipped incorrectly for matplotlib viewing
-    # plt.imshow(np.sqrt(displacement[:, :, 0]**2 + displacement[:, :, 1]**2))
-    plt.imshow(displacement[:, :, 1])
-    plt.colorbar()
-    plt.show()
-
-
-    # macro_strain = 0.1
-    # assert np.allclose(
-    #     displacement[-1, :, 0] - displacement[0, :, 0], 10 * macro_strain
-    # )
-    # assert np.allclose(displacement[0, :, 1], displacement[-1, :, 1])
-    # assert np.allclose(displacement[:, 0], displacement[:, -1])
+    assert np.allclose(main((10, 10))[1][0, 0], [-0.00515589, -0.00515589])
 
 
 if __name__ == "__main__":
-    test()
+    _, displacement, _ = main((50, 50))
+
+    import matplotlib.pyplot as plt
+
+    displacement = displacement.swapaxes(
+        0, 1
+    )  # axes are flipped incorrectly for matplotlib viewing
+    plt.imshow(np.sqrt(displacement[:, :, 0] ** 2 + displacement[:, :, 1] ** 2))
+    # plt.imshow(displacement[:, :, 1])
+    plt.colorbar()
+    plt.show()
