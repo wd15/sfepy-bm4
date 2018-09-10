@@ -68,82 +68,81 @@ def get_bcs(domain, dx):
                        get_bc(domain, dx, 0, {'u.1': 0.0})])
 
 
-class ElasticFESimulation(object):
-    def run(self, calc_stiffness, calc_prestress, shape, dx=1.0):
-        domain = pipe(
-            np.array(shape),
-            lambda x: gen_block_mesh(x * dx, x + 1, np.zeros_like(shape), verbose=False),
-            lambda x: Domain('domain', x)
-        )
+def solve(calc_stiffness, calc_prestress, shape, dx=1.0):
+    domain = pipe(
+        np.array(shape),
+        lambda x: gen_block_mesh(x * dx, x + 1, np.zeros_like(shape), verbose=False),
+        lambda x: Domain('domain', x)
+    )
 
-        region_all = domain.create_region('region_all', 'all')
+    region_all = domain.create_region('region_all', 'all')
 
-        field = Field.from_args('fu', np.float64, 'vector', region_all, # pylint: disable=no-member
-                                approx_order=2)
+    field = Field.from_args('fu', np.float64, 'vector', region_all, # pylint: disable=no-member
+                            approx_order=2)
 
-        u = FieldVariable('u', 'unknown', field)
-        v = FieldVariable('v', 'test', field, primary_var_name='u')
+    u = FieldVariable('u', 'unknown', field)
+    v = FieldVariable('v', 'test', field, primary_var_name='u')
 
-        def _material_func_(_, coors, mode=None, **kwargs):
-            if mode == 'qp':
-                return dict(
-                    D=calc_stiffness(coors),
-                    stress=calc_prestress(coors)
-                )
-            else:
-                return
+    def _material_func_(_, coors, mode=None, **kwargs):
+        if mode == 'qp':
+            return dict(
+                D=calc_stiffness(coors),
+                stress=calc_prestress(coors)
+            )
+        else:
+            return
 
-        m = Material(
-            'm',
-            function=Function('material_func', _material_func_)
-        )
+    m = Material(
+        'm',
+        function=Function('material_func', _material_func_)
+    )
 
-        integral = Integral('i', order=4)
+    integral = Integral('i', order=4)
 
-        t1 = Term.new('dw_lin_elastic(m.D, v, u)',
-                      integral, region_all, m=m, v=v, u=u)
+    t1 = Term.new('dw_lin_elastic(m.D, v, u)',
+                  integral, region_all, m=m, v=v, u=u)
 
-        t2 = Term.new('dw_lin_prestress(m.stress, v)',
-                      integral, region_all, m=m, v=v)
+    t2 = Term.new('dw_lin_prestress(m.stress, v)',
+                  integral, region_all, m=m, v=v)
 
-        eq = Equation('balance_of_forces', Terms([t1, t2]))
-        eqs = Equations([eq])
+    eq = Equation('balance_of_forces', Terms([t1, t2]))
+    eqs = Equations([eq])
 
-        ebcs = get_bcs(domain, dx)
+    ebcs = get_bcs(domain, dx)
 
-        ls = ScipyDirect({})
+    ls = ScipyDirect({})
 
-        pb = Problem('elasticity', equations=eqs)
+    pb = Problem('elasticity', equations=eqs)
 
-        pb.time_update(ebcs=ebcs)
+    pb.time_update(ebcs=ebcs)
 
-        ev = pb.get_evaluator()
-        nls = Newton({}, lin_solver=ls,
-                     fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix)
+    ev = pb.get_evaluator()
+    nls = Newton({}, lin_solver=ls,
+                 fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix)
 
-        pb.set_solver(nls)
+    pb.set_solver(nls)
 
-        vec = pb.solve()
+    vec = pb.solve()
 
-        u = vec.create_output_dict()['u'].data
+    u = vec.create_output_dict()['u'].data
 
-        u_reshape = np.reshape(u, (tuple(x + 1 for x in shape) + u.shape[-1:]))
+    u_reshape = np.reshape(u, (tuple(x + 1 for x in shape) + u.shape[-1:]))
 
-        dims = domain.get_mesh_bounding_box().shape[1]
-        strain = np.squeeze(
-            pb.evaluate(
-                'ev_cauchy_strain.{dim}.region_all(u)'.format(
-                    dim=dims),
-                mode='el_avg',
-                copy_materials=False))
-        strain_reshape = np.reshape(strain, (shape + strain.shape[-1:]))
+    dims = domain.get_mesh_bounding_box().shape[1]
+    strain = np.squeeze(
+        pb.evaluate(
+            'ev_cauchy_strain.{dim}.region_all(u)'.format(
+                dim=dims),
+            mode='el_avg',
+            copy_materials=False))
+    strain_reshape = np.reshape(strain, (shape + strain.shape[-1:]))
 
-        stress = np.squeeze(
-            pb.evaluate(
-                'ev_cauchy_stress.{dim}.region_all(m.D, u)'.format(
-                    dim=dims),
-                mode='el_avg',
-                copy_materials=False))
-        stress_reshape = np.reshape(stress, (shape + stress.shape[-1:]))
+    stress = np.squeeze(
+        pb.evaluate(
+            'ev_cauchy_stress.{dim}.region_all(m.D, u)'.format(
+                dim=dims),
+            mode='el_avg',
+            copy_materials=False))
+    stress_reshape = np.reshape(stress, (shape + stress.shape[-1:]))
 
-        return strain_reshape, u_reshape, stress_reshape
+    return strain_reshape, u_reshape, stress_reshape

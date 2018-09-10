@@ -6,7 +6,7 @@
 import numpy as np
 from toolz.curried import pipe, curry, do
 
-from module import ElasticFESimulation
+from module import solve
 
 
 @curry
@@ -110,7 +110,7 @@ def main(shape, dx):
       tuple of strain, displacement and stress
     """
     calc_eta_func = calc_eta(delta=dx, radius=shape[0] * dx / 4.)
-    return ElasticFESimulation().run(
+    return solve(
         calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, dx=dx
     )
 
