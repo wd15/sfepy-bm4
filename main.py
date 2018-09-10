@@ -6,7 +6,7 @@
 import numpy as np
 from toolz.curried import pipe, curry, do
 
-from module import solve
+from sfepy_module import solve
 
 
 @curry

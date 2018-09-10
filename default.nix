@@ -7,7 +7,7 @@ let
   black = import ./nix/black.nix { inherit pypkgs toml; };
   nbval = import ./nix/nbval.nix { inherit nixpkgs pypkgs; };
 in
-  nixpkgs.stdenv.mkDerivation rec {
+  pypkgs.buildPythonPackage rec {
     name = "sfepy-env";
     env = nixpkgs.buildEnv { name=name; paths=buildInputs; };
     buildInputs =  [
