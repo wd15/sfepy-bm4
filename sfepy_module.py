@@ -1,19 +1,9 @@
-try:
-    import sfepy
-except ImportError:
-    import pytest
-
-    pytest.importorskip("sfepy")
-    raise
-
+"""All Sfepy imports go in this module
+"""
 import numpy as np
 from sfepy.base.goptions import goptions
 from sfepy.discrete.fem import Field
-
-try:
-    from sfepy.discrete.fem import FEDomain as Domain
-except ImportError:
-    from sfepy.discrete.fem import Domain
+from sfepy.discrete.fem import FEDomain as Domain
 from sfepy.discrete import (
     FieldVariable,
     Material,
@@ -30,7 +20,6 @@ from sfepy.solvers.nls import Newton
 from sfepy.discrete import Functions
 from sfepy.mesh.mesh_generators import gen_block_mesh
 from sfepy.base.base import output
-
 from toolz.curried import pipe, curry, do
 
 
@@ -38,16 +27,39 @@ goptions["verbose"] = False
 output.set_output(quiet=True)
 
 
-@curry
-def check(coords, ids):
+def check(ids):
+    """Check that the fixed displacement nodes have been isolatedn
+
+    Args:
+      ids: the isolated IDs
+
+    Returns the unchanged IDs
+    """
     if len(ids) != 3:
         raise RuntimeError("length of ids is incorrect")
     return ids
 
 
 @curry
+# pylint: disable=unused-argument
 def subdomain(i_x, domain_, eps, coords, domain=None):
+    """Find the node IDs that will be fixed
+
+    Args:
+      i_x: the index (either 0 or 1) depends on direction of axes
+      domain_: the Sfepy domain
+      eps: a small value
+      coords: the coordinates of the nodes
+      domain: the argument when the curried version of this function
+        is passed into Github, this can be None (hence why we need
+        domain_)
+
+    Returns:
+      the isolated node IDs
+    """
     def i_y():
+        """Switch the index from 0 -> 1 or from 1 -> 0
+        """
         return (i_x + 1) % 2
 
     return pipe(
@@ -56,11 +68,22 @@ def subdomain(i_x, domain_, eps, coords, domain=None):
         lambda x: (coords[:, i_x] > domain_.get_mesh_bounding_box()[1][i_x] - eps) | x,
         lambda x: (coords[:, i_y()] < eps) & (coords[:, i_y()] > -eps) & x,
         lambda x: np.where(x)[0],
-        check(coords),
+        check,
     )
 
 
 def get_bc(domain, dx, index, cond):
+    """Make a displacement boundary condition
+
+    Args:
+      domain: the Sfepy domain
+      dx: the mesh spacing
+      index: the index (either 0 or 1) depends on direction of axes
+      cond: the BC dictionary
+
+    Returns:
+      the Sfepy boundary condition
+    """
     return pipe(
         Function("fix_points", subdomain(index, domain, dx * 1e-3)),
         lambda x: domain.create_region(
@@ -74,12 +97,30 @@ def get_bc(domain, dx, index, cond):
 
 
 def get_bcs(domain, dx):
+    """Get the boundary conditions
+
+    Args:
+      domain: the Sfepy domain
+      dx: the mesh spacing
+
+    Returns:
+      the boundary conditions
+    """
     return Conditions(
         [get_bc(domain, dx, 1, {"u.0": 0.0}), get_bc(domain, dx, 0, {"u.1": 0.0})]
     )
 
 
 def get_material(calc_stiffness, calc_prestress):
+    """Get the material
+
+    Args:
+      calc_stiffness: the function for calculating the stiffness tensor
+      calc_prestress: the function for calculating the prestress
+
+    Returns:
+      the material
+    """
     def _material_func_(_, coors, mode=None, **kwargs):
         if mode == "qp":
             return dict(D=calc_stiffness(coors), stress=calc_prestress(coors))
@@ -101,7 +142,8 @@ def get_uv(shape, dx):
             FieldVariable("v", "test", x, primary_var_name="u"),
         ),
     )
-    # field = Field.from_args('fu', np.float64, 'vector', region_all, # pylint: disable=no-member
+    # field = Field.from_args('fu', np.float64, 'vector', region_all,
+    # pylint: disable=no-member
     #                         approx_order=2)
 
 
@@ -120,14 +162,17 @@ def get_terms(u, v, calc_stiffness, calc_prestress):
             Integral("i", order=4),
             v.field.region,
             m=get_material(calc_stiffness, calc_prestress),
-            v=v
-        )
+            v=v,
+        ),
     )
 
 
 def get_nls(ev):
     return Newton(
-        {}, lin_solver=ScipyDirect({}), fun=ev.eval_residual, fun_grad=ev.eval_tangent_matrix
+        {},
+        lin_solver=ScipyDirect({}),
+        fun=ev.eval_residual,
+        fun_grad=ev.eval_tangent_matrix,
     )
 
 
@@ -137,40 +182,43 @@ def get_problem(u, v, calc_stiffness, calc_prestress, dx):
         lambda x: Equation("balance_of_forces", Terms([x[0], x[1]])),
         lambda x: Problem("elasticity", equations=Equations([x])),
         do(lambda x: x.time_update(ebcs=get_bcs(v.field.region.domain, dx))),
-        do(lambda x: x.set_solver(get_nls(x.get_evaluator())))
+        do(lambda x: x.set_solver(get_nls(x.get_evaluator()))),
     )
+
+
+def get_displacement(vec, shape):
+    return pipe(
+        vec.create_output_dict()["u"].data,
+        lambda x: np.reshape(x, (tuple(y + 1 for y in shape) + x.shape[-1:])),
+    )
+
+
+def get_strain(pb, shape):
+    return get_stress_strain(pb, shape, "ev_cauchy_strain.{dim}.region_all(u)")
+
+
+def get_stress(pb, shape):
+    return get_stress_strain(pb, shape, "ev_cauchy_stress.{dim}.region_all(m.D, u)")
+
+
+def get_stress_strain(pb, shape, str_):
+    return pipe(
+        np.squeeze(
+            pb.evaluate(
+                str_.format(dim=len(shape)), mode="el_avg", copy_materials=False
+            )
+        ),
+        lambda x: np.reshape(x, (shape + x.shape[-1:])),
+    )
+
+
+def get_data(shape, pb, vec):
+    return (get_strain(pb, shape), get_displacement(vec, shape), get_stress(pb, shape))
 
 
 def solve(calc_stiffness, calc_prestress, shape, dx=1.0):
-    pb = pipe(
+    return pipe(
         get_uv(shape, dx),
-        lambda x: get_problem(x[0], x[1], calc_stiffness, calc_prestress, dx)
+        lambda x: get_problem(x[0], x[1], calc_stiffness, calc_prestress, dx),
+        lambda x: get_data(shape, x, x.solve()),
     )
-
-    vec = pb.solve()
-
-    u = vec.create_output_dict()["u"].data
-
-    u_reshape = np.reshape(u, (tuple(x + 1 for x in shape) + u.shape[-1:]))
-
-    dims = len(shape) #v.field.domain.get_mesh_bounding_box().shape[1]
-
-    strain = np.squeeze(
-        pb.evaluate(
-            "ev_cauchy_strain.{dim}.region_all(u)".format(dim=dims),
-            mode="el_avg",
-            copy_materials=False,
-        )
-    )
-    strain_reshape = np.reshape(strain, (shape + strain.shape[-1:]))
-
-    stress = np.squeeze(
-        pb.evaluate(
-            "ev_cauchy_stress.{dim}.region_all(m.D, u)".format(dim=dims),
-            mode="el_avg",
-            copy_materials=False,
-        )
-    )
-    stress_reshape = np.reshape(stress, (shape + stress.shape[-1:]))
-
-    return strain_reshape, u_reshape, stress_reshape
