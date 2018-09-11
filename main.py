@@ -100,18 +100,19 @@ def calc_prestress(calc_eta_func, coords, epsilon=0.005):
     )
 
 
-def main(shape, dx):
+def main(shape, delta_x):
     """Run the calculation
 
     Args:
-      the shape of the domain
+      shape: the shape of the domain
+      delta_x: the mesh spacing
 
     Returns:
       tuple of strain, displacement and stress
     """
-    calc_eta_func = calc_eta(delta=dx, radius=shape[0] * dx / 4.)
+    calc_eta_func = calc_eta(delta=delta_x, radius=shape[0] * delta_x / 4.)
     return solve(
-        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, dx=dx
+        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, delta_x
     )
 
 

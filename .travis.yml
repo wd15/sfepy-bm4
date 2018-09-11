@@ -17,6 +17,6 @@ install:
   - nix-build -A buildInputs
 script:
   - nix-shell --pure --command "py.test *.py"
-  - nix-shell --pure --command "pylint *.py"
+  - nix-shell --pure --command "pylint --rcfile=.pylintrc *.py"
   - nix-shell --pure --command "flake8 *.py"
   - nix-shell --pure --command "black --check *.py"
