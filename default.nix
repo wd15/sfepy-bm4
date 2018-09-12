@@ -6,6 +6,7 @@ let
   toml = import ./nix/toml.nix { inherit pypkgs; };
   black = import ./nix/black.nix { inherit pypkgs toml; };
   nbval = import ./nix/nbval.nix { inherit nixpkgs pypkgs; };
+  fipy = import ./nix/fipy.nix { inherit nixpkgs; };
 in
   pypkgs.buildPythonPackage rec {
     name = "sfepy-env";
@@ -34,7 +35,8 @@ in
       pypkgs.appdirs
       pypkgs.click
       toml
-    ];
+      fipy
+    ] ++ fipy.buildInputs;
     src=./.;
     catchConflicts=false;
     doCheck=false;
