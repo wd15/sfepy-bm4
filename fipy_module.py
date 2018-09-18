@@ -35,7 +35,7 @@ def df2_chem(eta):
         out += calc(i)
 
     out = 0.1 * out #np.sum(list(map(calc, np.arange(2, 11))))
-    print(out)
+
     return out
 
 def df2_(eta):
@@ -57,17 +57,18 @@ def run():
 
     mobility = 5.0
 
-    eq = fp.TransientTerm() == -fp.DiffusionTerm((mobility, kappa)) + fp.DiffusionTerm(mobility * df2)
-    # eq1 = fp.TransientTerm(var=eta) == -fp.DiffusionTerm(coeff=mobility, var=psi) + fp.DiffusionTerm(coeff=mobility * df2, var=eta)
-    # eq2 = fp.ImplicitSourceTerm(coeff=1.0, var=psi) == fp.DiffusionTerm(coeff=kappa, var=eta)
+    #eq = fp.TransientTerm() == -fp.DiffusionTerm((mobility, kappa)) + fp.DiffusionTerm(mobility * df2)
+    eq1 = fp.TransientTerm(var=eta) == -fp.DiffusionTerm(coeff=mobility, var=psi) + fp.DiffusionTerm(coeff=mobility * df2, var=eta)
+    eq2 = fp.ImplicitSourceTerm(coeff=1.0, var=psi) == fp.DiffusionTerm(coeff=kappa, var=eta)
 
-    # eq = eq1 & eq2
+    eq = eq1 & eq2
 
-    for i in range(5):
+    for i in range(100):
         eta.updateOld()
         psi.updateOld()
         df2[:] = df2_(eta.faceValue)
-        res = eq.sweep(eta, dt=1.0e-1)
+        # res = eq.sweep(eta, dt=1.0e-1)
+        res = eq.sweep(dt=1e-1)
         print(res)
 
     return eta
