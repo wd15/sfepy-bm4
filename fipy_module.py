@@ -30,14 +30,13 @@ def get_vars(params, mesh):
       mesh: the FiPy mesh
 
     Returns:
-      a dictionary of the variables (eta, psi, d2f)
+      a dictionary of the variables (eta, d2f)
     """
     return pipe(
         dict(
             eta=fp.CellVariable(
                 mesh=mesh, hasOld=True, value=params["eta0"], name="eta"
             ),
-            psi=fp.CellVariable(mesh=mesh, hasOld=True, name="psi"),
             d2f=fp.FaceVariable(mesh=mesh, name="d2f"),
         ),
         do(
@@ -49,24 +48,24 @@ def get_vars(params, mesh):
 
 
 @curry
-def get_eq(params, eta, psi, d2f):
+def get_eq(params, eta, d2f):
     """Get the equation
 
     Args:
       params: the parameter dictionary
       eta: the phase field variable
-      psi: the dummy variable
       d2f: the free energy double derivative variable
 
     Returns:
       a dictionary of the equation and variables
     """
     return pipe(
-        (
+        fp.CellVariable(mesh=eta.mesh, name="psi"),
+        lambda x: (
             fp.TransientTerm(var=eta)
-            == -fp.DiffusionTerm(coeff=params["mobility"], var=psi)
+            == -fp.DiffusionTerm(coeff=params["mobility"], var=x)
             + fp.DiffusionTerm(coeff=params["mobility"] * d2f, var=eta),
-            fp.ImplicitSourceTerm(coeff=1.0, var=psi)
+            fp.ImplicitSourceTerm(coeff=1.0, var=x)
             == fp.DiffusionTerm(coeff=params["kappa"], var=eta),
         ),
         lambda x: x[0] & x[1],
@@ -74,7 +73,7 @@ def get_eq(params, eta, psi, d2f):
 
 
 @curry
-def sweep(calc_d2f, equation, eta, psi, d2f):
+def sweep(calc_d2f, equation, eta, d2f):
     """Do one solve iteration
 
     Args:
@@ -82,7 +81,6 @@ def sweep(calc_d2f, equation, eta, psi, d2f):
         derivative
       equation: the equation
       eta: the phase field variable
-      psi: the dummy variable
       d2f: the free energy double derivative variable
 
     Returns:
@@ -91,7 +89,6 @@ def sweep(calc_d2f, equation, eta, psi, d2f):
 
     """
     eta.updateOld()
-    psi.updateOld()
     d2f.setValue(calc_d2f(np.array(eta.faceValue)))
     res = equation.sweep(dt=1e-1)
     print(res)
