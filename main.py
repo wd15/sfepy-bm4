@@ -4,9 +4,22 @@
 # pylint: disable=no-value-for-parameter
 
 import numpy as np
-from toolz.curried import pipe, curry, do
+from toolz.curried import pipe, curry, do, assoc
+from toolz.curried import map as map_
 
-from sfepy_module import solve
+from sfepy_module import solve as sfepy_solve
+from fipy_module import solve as fipy_solve, view
+
+
+def params():
+    """Dictionary of base parameters
+
+    Returns:
+      parameter dictionary
+    """
+    return dict(
+        lx=200.0, nx=200, radius=20.0, kappa=0.29, mobility=5.0, eta0=0.0065, max_iter=5
+    )
 
 
 @curry
@@ -42,6 +55,80 @@ def calc_h(eta):
 
     """
     return eta ** 3 * (6 * eta ** 2 - 15 * eta + 10)
+
+
+def calc_dh(eta):
+    """Calculate the first derivative of the interpolation function
+
+    Args:
+      eta: the phase field
+
+    Returns:
+      the value of dh
+    """
+    return 30 * eta ** 2 * (eta - 1) ** 2
+
+
+def calc_d2h(eta):
+    """Calculate the second derivative of the interpolation function
+
+    Args:
+      eta: the phase field
+
+    Returns:
+      the value of d2h
+    """
+    return 60 * eta * (2 * eta - 1) * (eta - 1)
+
+
+def calc_elastic_f():
+    """Elastic free energy in the matrix
+    """
+    c_11 = 250
+    c_12 = 150
+    epsilon = 0.005
+    return 2 * epsilon ** 2 * (c_11 + c_12)
+
+
+def calc_elastic_d2f(eta):
+    """Calculate the second derivative of the elastic free energy
+    """
+    return (calc_dh(eta) ** 2 + calc_h(eta) * calc_d2h(eta)) * calc_elastic_f()
+
+
+def calc_chem_d2f(eta):
+    """Calculate the second derivative of the chemical free energy
+    """
+
+    def a_j(j):
+        """The a_j coefficients from the spec
+        """
+        return [
+            0,
+            0,
+            8.072789087,
+            -81.24549382,
+            408.0297321,
+            -1244.129167,
+            2444.046270,
+            -3120.635139,
+            2506.663551,
+            -1151.003178,
+            230.2006355,
+        ][j]
+
+    def calc_term(j):
+        """Calculate a singe term in the free energy sum
+        """
+        return a_j(j) * j * (j - 1) * eta ** (j - 2)
+
+    return 0.1 * sum(map_(calc_term, range(2, 11)))
+
+
+def calc_d2f(eta):
+    """Calculate the second derivative of the total free energy
+    """
+    return calc_elastic_d2f(eta) + calc_chem_d2f(eta)
 
 
 def stiffness_matrix(c11=250, c12=150, c44=100):
@@ -111,25 +198,49 @@ def main(shape, delta_x):
       tuple of strain, displacement and stress
     """
     calc_eta_func = calc_eta(delta=delta_x, radius=shape[0] * delta_x / 4.)
-    return solve(
+    return sfepy_solve(
         calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, delta_x
     )
 
 
-def test():
+def test_sfepy():
     """Run some tests
     """
     assert np.allclose(main((10, 10), 1.0)[1][0, 0], [-0.00515589, -0.00515589])
     assert np.allclose(main((10, 10), 0.1)[1][0, 0], [-0.00051559, -0.00051559])
 
 
-if __name__ == "__main__":
+def test_fipy():
+    """Run the FiPy tests
+    """
+    assert np.allclose(
+        fipy_solve(assoc(params(), "max_iter", 2), calc_d2f)["residuals"][-1],
+        60.73614562846711,
+    )
+
+
+def run_sfepy():
+    """Run the Sfepy example
+    """
     import matplotlib.pyplot as plt
 
     pipe(
-        main((50, 50), 0.1)[1],
+        main((200, 200), 0.1)[1],
         lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
         do(plt.imshow),
     )
     plt.colorbar()
     plt.show()
+    input("stopped")
+
+
+def run_fipy():
+    """Run the fipy example
+    """
+    view(fipy_solve(params(), calc_d2f)["eta"])
+    input("stopped")
+
+
+if __name__ == "__main__":
+    run_sfepy()
+    run_fipy()
