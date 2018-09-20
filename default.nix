@@ -36,7 +36,7 @@ in
       pypkgs.click
       toml
       fipy
-    ] ++ fipy.buildInputs;
+    ];
     src=./.;
     catchConflicts=false;
     doCheck=false;
