@@ -187,15 +187,29 @@ def calc_prestress(calc_eta_func, coords, epsilon=0.005):
     )
 
 
-def main(shape, delta_x):
+def run():
     """Run the calculation
-
-    Args:
-      shape: the shape of the domain
-      delta_x: the mesh spacing
 
     Returns:
       tuple of strain, displacement and stress
+    """
+    eta = fipy_solve(params(), calc_d2f)["eta"]
+
+    def calc_eta_func(coords):
+        """Calculate phase field given Sfepy coords
+        """
+        return eta(coords.swapaxes(0, 1), order=1)
+
+    return sfepy_solve(
+        calc_stiffness(calc_eta_func),
+        calc_prestress(calc_eta_func),
+        (params()["nx"], params()["nx"]),
+        params()["lx"] / params()["nx"],
+    )
+
+
+def run_sfepy_fake(shape, delta_x):
+    """Run a Sfepy calculation
     """
     calc_eta_func = calc_eta(delta=delta_x, radius=shape[0] * delta_x / 4.)
     return sfepy_solve(
@@ -206,8 +220,12 @@ def main(shape, delta_x):
 def test_sfepy():
     """Run some tests
     """
-    assert np.allclose(main((10, 10), 1.0)[1][0, 0], [-0.00515589, -0.00515589])
-    assert np.allclose(main((10, 10), 0.1)[1][0, 0], [-0.00051559, -0.00051559])
+    assert np.allclose(
+        run_sfepy_fake((10, 10), 1.0)[1][0, 0], [-0.00515589, -0.00515589]
+    )
+    assert np.allclose(
+        run_sfepy_fake((10, 10), 0.1)[1][0, 0], [-0.00051559, -0.00051559]
+    )
 
 
 def test_fipy():
@@ -225,7 +243,7 @@ def run_sfepy():
     import matplotlib.pyplot as plt
 
     pipe(
-        main((200, 200), 0.1)[1],
+        run()[1],
         lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
         do(plt.imshow),
     )
@@ -243,4 +261,4 @@ def run_fipy():
 
 if __name__ == "__main__":
     run_sfepy()
-    run_fipy()
+    # run_fipy()
