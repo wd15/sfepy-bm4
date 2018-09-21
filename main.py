@@ -18,7 +18,18 @@ def params():
       parameter dictionary
     """
     return dict(
-        lx=200.0, nx=200, radius=20.0, kappa=0.29, mobility=5.0, eta0=0.0065, max_iter=5
+        lx=200.0,
+        nx=200,
+        radius=20.0,
+        kappa=0.29,
+        mobility=5.0,
+        eta0=0.0065,
+        max_iter=5,
+        C11=250.0,
+        C12=150.0,
+        C44=100.0,
+        delta=0.0,
+        misfit_strain=0.005,
     )
 
 
@@ -109,7 +120,7 @@ def calc_d2f(eta):
     return calc_elastic_d2f(eta) + calc_chem_d2f(eta)
 
 
-def stiffness_matrix(c11=250, c12=150, c44=100):
+def stiffness_matrix(params_):
     """Stiffness tensor in the matrix phase
 
     Args:
@@ -120,11 +131,17 @@ def stiffness_matrix(c11=250, c12=150, c44=100):
     Returns:
       3 x 3 stiffness tensor in the matrix phase
     """
-    return np.array([[c11, c12, 0], [c12, c11, 0], [0, 0, c44]])
+    return np.array(
+        [
+            [params_["C11"], params_["C12"], 0],
+            [params_["C12"], params_["C11"], 0],
+            [0, 0, params_["C44"]],
+        ]
+    )
 
 
 @curry
-def calc_stiffness(calc_eta_func, coords):
+def calc_stiffness(params_, calc_eta_func, coords):
     """Total stiffness tensor
 
     3 x 3 Stiffness matrix for Sfepy
@@ -137,13 +154,13 @@ def calc_stiffness(calc_eta_func, coords):
       n x 3 x 3 stiffness tensor
     """
     return (
-        stiffness_matrix()[None]
-        * (1 + 0.1 * calc_h(calc_eta_func(coords)))[:, None, None]
+        stiffness_matrix(params_)[None]
+        * (1 + params_["delta"] * calc_h(calc_eta_func(coords)))[:, None, None]
     )
 
 
 @curry
-def calc_prestress(calc_eta_func, coords, epsilon=0.005):
+def calc_prestress(params_, calc_eta_func, coords):
     """Calculate the prestress
 
     Calculate -h(eta) * [ C_ijkl(eta) * epsilonT_kl ]
@@ -159,28 +176,40 @@ def calc_prestress(calc_eta_func, coords, epsilon=0.005):
       n x 3 x 1 stress tensor
     """
     return pipe(
-        np.dot(calc_stiffness(calc_eta_func, coords), [epsilon, epsilon, 0]),
+        params_["misfit_strain"],
+        lambda x: np.dot(calc_stiffness(params_, calc_eta_func, coords), [x, x, 0]),
         lambda x: -calc_eta_func(coords)[:, None] * x,
         lambda x: np.ascontiguousarray(x[:, :, None]),
     )
 
 
-def run():
+def run_fipy_to_sfepy(params_):
     """Run the calculation
 
     Returns:
       tuple of strain, displacement and stress
     """
-    eta = fipy_solve(params(), calc_d2f)["eta"]
+    # eta = fipy_solve(params(), calc_d2f)["eta"]
 
-    def calc_eta_func(coords):
-        """Calculate phase field given Sfepy coords
+    # @curry
+    # def calc_eta_func(eta, coords):
+    #     """Calculate phase field given Sfepy coords
+    #     """
+    #     return eta(coords.
+
+    @curry
+    def interpolate(var, coords):
+        """Interpolate from a variable to given coords
         """
-        return eta(coords.swapaxes(0, 1), order=1)
+        return var(coords.swapaxes(0, 1), order=1)
 
-    return sfepy_solve(
-        calc_stiffness(calc_eta_func),
-        calc_prestress(calc_eta_func),
-        (params()["nx"], params()["nx"]),
-        params()["lx"] / params()["nx"],
+    return pipe(
+        fipy_solve(params_, calc_d2f)["eta"],
+        interpolate,
+        lambda x: sfepy_solve(
+            calc_stiffness(params_, x),
+            calc_prestress(params_, x),
+            (params_["nx"], params_["nx"]),
+            params_["lx"] / params_["nx"],
+        ),
     )

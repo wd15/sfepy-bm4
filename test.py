@@ -11,7 +11,7 @@ from main import (
     fipy_solve,
     params,
     calc_d2f,
-    run,
+    run_fipy_to_sfepy,
 )
 
 
@@ -66,13 +66,13 @@ def test_fipy():
     )
 
 
-def run_sfepy():
+def run_view():
     """Run the Sfepy example
     """
     import matplotlib.pyplot as plt
 
     pipe(
-        run()[1],
+        run_fipy_to_sfepy(params())[1],
         lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
         do(plt.imshow),
     )
@@ -89,4 +89,4 @@ def run_fipy():
 
 
 if __name__ == "__main__":
-    run_sfepy()
+    run_view()
