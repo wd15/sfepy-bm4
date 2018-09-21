@@ -11,9 +11,9 @@ def term1(params, strain, d2h_value):
         params["delta"]
         * d2h_value
         * (
-            params["C11"] * (strain["11"] ** 2 + strain["22"] ** 2)
-            + 2 * params["C12"] * strain["11"] * strain["22"]
-            + 4 * params["C44"] * strain["12"] ** 2
+            params["C11"] * (strain["e11"] ** 2 + strain["e22"] ** 2)
+            + 2 * params["C12"] * strain["e11"] * strain["e22"]
+            + 4 * params["C44"] * strain["e12"] ** 2
         )
     )
 
@@ -23,7 +23,7 @@ def term2(params, strain, dh_value):
     """
     return params["delta"] * dh_value ** 2 * params["strain_misfit"] * (
         params["C11"] + params["C22"]
-    ) + (strain["11"] + strain["22"])
+    ) + (strain["e11"] + strain["e22"])
 
 
 def term3(params, h_value, dh_value):
@@ -42,10 +42,10 @@ def term4(params, strain, h_value, d2h):
     """
     return (1 + params["delta"] * h_value) * d2h * params["strain_misfit"] * (
         params["C11"] + params["C22"]
-    ) + (strain["11"] + strain["22"])
+    ) * (strain["e11"] + strain["e22"])
 
 
-def calc_elastic_d2f(params, strain, h_value, dh_value, d2h_value):
+def calc_elastic_d2f_(params, strain, h_value, dh_value, d2h_value):
     """Calculate the second derivative of the elastic energy density
     """
     return (
