@@ -89,7 +89,7 @@ def sweep(calc_d2f, equation, eta, d2f):
 
     """
     eta.updateOld()
-    d2f.setValue(calc_d2f(np.array(eta.faceValue)))
+    d2f.setValue(calc_d2f(eta.faceValue))
     res = equation.sweep(dt=1e-1)
     print(res)
     return res
@@ -154,6 +154,18 @@ def view(var):
       var: variable to view
     """
     fp.Viewer(var).plot()
+
+
+@curry
+def to_face_value(mesh, value):
+    """Convert an array over cells to an array over faces
+    """
+    return pipe(
+        value,
+        lambda x: fp.CellVariable(mesh=mesh, value=value),
+        lambda x: x.faceValue,
+        np.array,
+    )
 
 
 def test():

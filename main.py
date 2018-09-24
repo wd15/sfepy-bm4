@@ -4,11 +4,11 @@
 # pylint: disable=no-value-for-parameter
 
 import numpy as np
-from toolz.curried import pipe, curry
+from toolz.curried import pipe, curry, valmap
 from toolz.curried import map as map_
 
 from sfepy_module import solve as sfepy_solve
-from fipy_module import solve as fipy_solve
+from fipy_module import solve as fipy_solve, to_face_value
 from elastic import calc_elastic_d2f_
 
 
@@ -71,20 +71,20 @@ def calc_d2h(eta):
     return 60 * eta * (2 * eta - 1) * (eta - 1)
 
 
-# def calc_elastic_f():
-#     """Elastic free energy in the matrix
-#     """
-#     c_11 = 250
-#     c_12 = 150
-#     epsilon = 0.005
-#     return 2 * epsilon ** 2 * (c_11 + c_12)
-
-
-def calc_elastic_d2f(params, strain, eta):
+def calc_elastic_d2f(params, total_strain, eta):
     """Calculate the second derivative of the elastic free energy
     """
-    return calc_elastic_d2f_(params, strain, calc_h(eta), calc_dh(eta), calc_d2h(eta))
-    # return (calc_dh(eta) ** 2 + calc_h(eta) * calc_d2h(eta)) * calc_elastic_f()
+    return pipe(
+        eta,
+        np.array,
+        lambda x: calc_elastic_d2f_(
+            params,
+            valmap(to_face_value(eta.mesh), total_strain),
+            calc_h(x),
+            calc_dh(x),
+            calc_d2h(x),
+        ),
+    )
 
 
 def calc_chem_d2f(eta):
@@ -199,7 +199,7 @@ def run_fipy_to_sfepy(params):
         """
         return var(coords.swapaxes(0, 1), order=1)
 
-    return pipe(
+    out = pipe(
         dict(e11=0.0, e12=0.0, e22=0.0),
         calc_d2f(params),
         lambda x: fipy_solve(params, x)["eta"],
@@ -209,5 +209,15 @@ def run_fipy_to_sfepy(params):
             calc_prestress(params, x),
             (params["nx"], params["nx"]),
             params["lx"] / params["nx"],
-        ),
+        )[0],
+        lambda x: x.swapaxes(0, 1),
+        lambda x: x.reshape(x.shape[0] * x.shape[1], x.shape[2]),
+        lambda x: dict(e11=x[:, 0], e12=x[:, 2], e22=x[:, 1]),
+        calc_d2f(params),
+        lambda x: fipy_solve(params, x)["eta"],
     )
+
+    from fipy_module import view
+
+    view(out)
+    input("stopped")
