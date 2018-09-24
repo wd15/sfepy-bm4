@@ -116,10 +116,11 @@ def calc_chem_d2f(eta):
     return 0.1 * sum(map_(calc_term, range(2, 11)))
 
 
-def calc_d2f(params, strain, eta):
+@curry
+def calc_d2f(params, total_strain, eta):
     """Calculate the second derivative of the total free energy
     """
-    return calc_elastic_d2f(params, strain, eta) + calc_chem_d2f(eta)
+    return calc_elastic_d2f(params, total_strain, eta) + calc_chem_d2f(eta)
 
 
 def stiffness_matrix(params):
@@ -198,10 +199,10 @@ def run_fipy_to_sfepy(params):
         """
         return var(coords.swapaxes(0, 1), order=1)
 
-    strain = dict(e11=0.9, e12=0.0, e44=0.0)
-
     return pipe(
-        fipy_solve(params, calc_d2f(params, strain))["eta"],
+        dict(e11=0.0, e12=0.0, e22=0.0),
+        calc_d2f(params),
+        lambda x: fipy_solve(params, x)["eta"],
         interpolate,
         lambda x: sfepy_solve(
             calc_stiffness(params, x),

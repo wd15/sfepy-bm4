@@ -9,7 +9,7 @@ from main import (
     calc_prestress,
     sfepy_solve,
     fipy_solve,
-    params,
+    get_params,
     calc_d2f,
     run_fipy_to_sfepy,
 )
@@ -37,12 +37,15 @@ def calc_eta(coords, delta=1.0, radius=2.5):
     )
 
 
-def run_sfepy_fake(shape, delta_x):
+def run_sfepy_fake(params, shape, delta_x):
     """Run a Sfepy calculation
     """
     calc_eta_func = calc_eta(delta=delta_x, radius=shape[0] * delta_x / 4.)
     return sfepy_solve(
-        calc_stiffness(calc_eta_func), calc_prestress(calc_eta_func), shape, delta_x
+        calc_stiffness(params, calc_eta_func),
+        calc_prestress(params, calc_eta_func),
+        shape,
+        delta_x,
     )
 
 
@@ -50,19 +53,26 @@ def test_sfepy():
     """Run some tests
     """
     assert np.allclose(
-        run_sfepy_fake((10, 10), 1.0)[1][0, 0], [-0.00515589, -0.00515589]
+        run_sfepy_fake(assoc(get_params(), "delta", 0.1), (10, 10), 1.0)[1][0, 0],
+        [-0.00515589, -0.00515589],
     )
     assert np.allclose(
-        run_sfepy_fake((10, 10), 0.1)[1][0, 0], [-0.00051559, -0.00051559]
+        run_sfepy_fake(assoc(get_params(), "delta", 0.1), (10, 10), 0.1)[1][0, 0],
+        [-0.00051559, -0.00051559],
     )
 
 
 def test_fipy():
     """Run the FiPy tests
     """
-    assert np.allclose(
-        fipy_solve(assoc(params(), "max_iter", 2), calc_d2f)["residuals"][-1],
-        60.73614562846711,
+    assert pipe(
+        dict(e11=0.0, e12=0.0, e22=0.0),
+        lambda x: np.allclose(
+            fipy_solve(assoc(get_params(), "max_iter", 2), calc_d2f(get_params(), x))[
+                "residuals"
+            ][-1],
+            60.309247734253795,
+        ),
     )
 
 
@@ -72,7 +82,7 @@ def run_view():
     import matplotlib.pyplot as plt
 
     pipe(
-        run_fipy_to_sfepy(params())[1],
+        run_fipy_to_sfepy(get_params())[1],
         lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
         do(plt.imshow),
     )
@@ -84,7 +94,7 @@ def run_view():
 def run_fipy():
     """Run the fipy example
     """
-    view(fipy_solve(params(), calc_d2f)["eta"])
+    view(fipy_solve(get_params(), calc_d2f)["eta"])
     input("stopped")
 
 
