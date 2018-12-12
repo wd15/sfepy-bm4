@@ -1,6 +1,6 @@
 """Run test cases
 """
-from toolz.curried import pipe, curry, assoc, do
+from toolz.curried import pipe, curry, assoc
 import numpy as np
 
 from fipy_module import view
@@ -11,7 +11,7 @@ from main import (
     fipy_solve,
     get_params,
     calc_d2f,
-    run_fipy_to_sfepy,
+    run,
 )
 
 
@@ -79,15 +79,8 @@ def test_fipy():
 def run_view():
     """Run the Sfepy example
     """
-    import matplotlib.pyplot as plt
-
-    pipe(
-        run_fipy_to_sfepy(get_params())[1],
-        lambda x: np.sqrt(np.sum(x ** 2, axis=-1)).swapaxes(0, 1),
-        do(plt.imshow),
-    )
-    plt.colorbar()
-    plt.show()
+    data = run(get_params())
+    view(data["eta"])
     input("stopped")
 
 

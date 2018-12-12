@@ -4,11 +4,11 @@
 # pylint: disable=no-value-for-parameter
 
 import numpy as np
-from toolz.curried import pipe, curry, valmap
+from toolz.curried import pipe, curry, valmap, dissoc, assoc
 from toolz.curried import map as map_
 
 from sfepy_module import solve as sfepy_solve
-from fipy_module import solve as fipy_solve, to_face_value
+from fipy_module import solve as fipy_solve, to_face_value, iterate_
 from elastic import calc_elastic_d2f_
 
 
@@ -31,6 +31,7 @@ def get_params():
         C44=100.0,
         delta=0.0,
         misfit_strain=0.005,
+        iterations=2,
     )
 
 
@@ -186,11 +187,16 @@ def calc_prestress(params, calc_eta_func, coords):
     )
 
 
-def run_fipy_to_sfepy(params):
-    """Run the calculation
+@curry
+def sfepy_iter(params, eta):
+    """One Sfepy iteration interpolating from FiPy
+
+    Args:
+      params: the parameter dictionary
+      eta: the phase field
 
     Returns:
-      tuple of strain, displacement and stress
+      dictionary with total strain fields and phase field
     """
 
     @curry
@@ -199,10 +205,8 @@ def run_fipy_to_sfepy(params):
         """
         return var(coords.swapaxes(0, 1), order=1)
 
-    out = pipe(
-        dict(e11=0.0, e12=0.0, e22=0.0),
-        calc_d2f(params),
-        lambda x: fipy_solve(params, x)["eta"],
+    return pipe(
+        eta,
         interpolate,
         lambda x: sfepy_solve(
             calc_stiffness(params, x),
@@ -213,11 +217,52 @@ def run_fipy_to_sfepy(params):
         lambda x: x.swapaxes(0, 1),
         lambda x: x.reshape(x.shape[0] * x.shape[1], x.shape[2]),
         lambda x: dict(e11=x[:, 0], e12=x[:, 2], e22=x[:, 1]),
-        calc_d2f(params),
-        lambda x: fipy_solve(params, x)["eta"],
     )
 
-    from fipy_module import view
 
-    view(out)
-    input("stopped")
+@curry
+def fipy_iter(params, total_strain):
+    """One FiPy iteration
+
+    Args:
+      params: the parameter dictionary
+      total_strain: dictionary of total strain fields
+
+    Returns:
+      the phase field variable
+    """
+    return pipe(total_strain, calc_d2f(params), lambda x: fipy_solve(params, x)["eta"])
+
+
+@curry
+def one_iter(params, data):
+    """Do one iteration
+
+    Args:
+      params: the parameter dictionary
+      data: dictionary of the phase field and strain fields
+
+    Returns:
+      dictionary of the phase field and strain fields
+    """
+    return pipe(
+        dissoc(data, "eta"),
+        fipy_iter(params),
+        lambda x: assoc(sfepy_iter(params, x), "eta", x),
+    )
+
+
+def run(params):
+    """Run the calculation
+
+    Args:
+      params: the list of parameters
+      iterations: the number of iterations
+
+    Returns:
+      tuple of strain, displacement and stress
+    """
+    return pipe(
+        dict(e11=0.0, e12=0.0, e22=0.0, eta=None),
+        iterate_(one_iter(params), params["iterations"]),
+    )

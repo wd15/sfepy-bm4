@@ -91,7 +91,7 @@ def sweep(calc_d2f, equation, eta, d2f):
     eta.updateOld()
     d2f.setValue(calc_d2f(eta.faceValue))
     res = equation.sweep(dt=1e-1)
-    print(res)
+    print("fipy residual:", res)
     return res
 
 
