@@ -147,7 +147,7 @@ def solve(params, calc_d2f):
     )
 
 
-def view(var):
+def view(var):  # pragma: no cover
     """View the phase field
 
     data:

@@ -1,9 +1,8 @@
 """Run test cases
 """
-from toolz.curried import pipe, curry, assoc
+from toolz.curried import pipe, curry, assoc, get
 import numpy as np
 
-from fipy_module import view
 from main import (
     calc_stiffness,
     calc_prestress,
@@ -11,7 +10,7 @@ from main import (
     fipy_solve,
     get_params,
     calc_d2f,
-    run,
+    run_main,
 )
 
 
@@ -76,20 +75,15 @@ def test_fipy():
     )
 
 
-def run_view():
-    """Run the Sfepy example
+def test_combined():
+    """Run a combined test
     """
-    data = run(get_params())
-    view(data["eta"])
-    input("stopped")
-
-
-def run_fipy():
-    """Run the fipy example
-    """
-    view(fipy_solve(get_params(), calc_d2f)["eta"])
-    input("stopped")
-
-
-if __name__ == "__main__":
-    run_view()
+    assert pipe(
+        get_params(),
+        assoc(key="max_iter", value=2),
+        run_main,
+        get("eta"),
+        np.array,
+        np.sum,
+        lambda x: np.allclose(x, 1515.784),
+    )

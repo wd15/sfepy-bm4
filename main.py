@@ -4,11 +4,11 @@
 # pylint: disable=no-value-for-parameter
 
 import numpy as np
-from toolz.curried import pipe, curry, valmap, dissoc, assoc
+from toolz.curried import pipe, curry, valmap, dissoc, assoc, get
 from toolz.curried import map as map_
 
 from sfepy_module import solve as sfepy_solve
-from fipy_module import solve as fipy_solve, to_face_value, iterate_
+from fipy_module import solve as fipy_solve, to_face_value, iterate_, view
 from elastic import calc_elastic_d2f_
 
 
@@ -43,7 +43,6 @@ def calc_h(eta):
 
     Returns:
       the value of h
-
     """
     return eta ** 3 * (6 * eta ** 2 - 15 * eta + 10)
 
@@ -252,7 +251,7 @@ def one_iter(params, data):
     )
 
 
-def run(params):
+def run_main(params):
     """Run the calculation
 
     Args:
@@ -266,3 +265,8 @@ def run(params):
         dict(e11=0.0, e12=0.0, e22=0.0, eta=None),
         iterate_(one_iter(params), params["iterations"]),
     )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    pipe(get_params(), run_main, get("eta"), view)
+    input("stopped")

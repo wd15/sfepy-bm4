@@ -28,12 +28,17 @@ output.set_output(quiet=True)
 
 
 def check(ids):
-    """Check that the fixed displacement nodes have been isolatedn
+    """Check that the fixed displacement nodes have been isolated
 
     Args:
       ids: the isolated IDs
 
     Returns the unchanged IDs
+
+    >>> check([1, 2, 3, 4])
+    Traceback (most recent call last):
+    ...
+    RuntimeError: length of ids is incorrect
     """
     if len(ids) != 3:
         raise RuntimeError("length of ids is incorrect")
