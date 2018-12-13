@@ -11,6 +11,7 @@ from main import (
     get_params,
     calc_d2f,
     run_main,
+    set_eta,
 )
 
 
@@ -67,9 +68,9 @@ def test_fipy():
     assert pipe(
         dict(e11=0.0, e12=0.0, e22=0.0),
         lambda x: np.allclose(
-            fipy_solve(assoc(get_params(), "max_iter", 2), calc_d2f(get_params(), x))[
-                "residuals"
-            ][-1],
+            fipy_solve(
+                assoc(get_params(), "max_iter", 2), set_eta, calc_d2f(get_params(), x)
+            )["residuals"][-1],
             60.309247734253795,
         ),
     )

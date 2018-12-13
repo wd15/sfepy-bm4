@@ -22,11 +22,12 @@ def get_mesh(params):
 
 
 @curry
-def get_vars(params, mesh):
+def get_vars(params, set_eta, mesh):
     """Get the variables
 
     Args:
       params: the parameter dict
+      set_eta: function to set the initial value of the phase field
       mesh: the FiPy mesh
 
     Returns:
@@ -39,11 +40,7 @@ def get_vars(params, mesh):
             ),
             d2f=fp.FaceVariable(mesh=mesh, name="d2f"),
         ),
-        do(
-            lambda x: x["eta"].setValue(
-                1., where=(mesh.x ** 2 + mesh.y ** 2) < params["radius"] ** 2
-            )
-        ),
+        do(set_eta(params, mesh)),
     )
 
 
@@ -113,13 +110,15 @@ def iterate_(func, times, value):
     return next(iter_)
 
 
-def solve(params, calc_d2f):
+def solve(params, set_eta, calc_d2f):
     """Solve the phase field problem with FiPy
 
     Args:
       params: dictionary of parameter values
+      set_eta: function to set the initial value of the phase field
       calc_df2: function to calculate the second derivative of the
         free energy function
+
 
     Returns:
       dictionary of the equation, variables and residuals
@@ -140,7 +139,7 @@ def solve(params, calc_d2f):
     return pipe(
         params,
         get_mesh,
-        get_vars(params),
+        get_vars(params, set_eta),
         lambda x: assoc(x, "equation", get_eq(params, **x)),
         lambda x: assoc(x, "residuals", ()),
         iterate_(sweep_wrapper, params["max_iter"]),

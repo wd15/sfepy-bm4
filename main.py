@@ -8,7 +8,8 @@ from toolz.curried import pipe, curry, valmap, dissoc, assoc, get
 from toolz.curried import map as map_
 
 from sfepy_module import solve as sfepy_solve
-from fipy_module import solve as fipy_solve, to_face_value, iterate_, view
+from fipy_module import solve as fipy_solve
+from fipy_module import to_face_value, iterate_, view
 from elastic import calc_elastic_d2f_
 
 
@@ -220,6 +221,21 @@ def sfepy_iter(params, eta):
 
 
 @curry
+def set_eta(params, mesh, vars_):
+    """Set the intial value of the phase field
+
+    Args:
+      params: the parameter dictioniary
+      mesh: the FiPy mesh
+      vars_: the solution variables
+
+    Returns:
+      nothing, this is a setter function
+    """
+    vars_["eta"].setValue(1., where=(mesh.x ** 2 + mesh.y ** 2) < params["radius"] ** 2)
+
+
+@curry
 def fipy_iter(params, total_strain):
     """One FiPy iteration
 
@@ -230,7 +246,9 @@ def fipy_iter(params, total_strain):
     Returns:
       the phase field variable
     """
-    return pipe(total_strain, calc_d2f(params), lambda x: fipy_solve(params, x)["eta"])
+    return pipe(
+        total_strain, calc_d2f(params), lambda x: fipy_solve(params, set_eta, x)["eta"]
+    )
 
 
 @curry
