@@ -38,6 +38,7 @@ def get_params():
         misfit_strain=0.005,
         iterations=2,
         output_frequency=1,
+        dt=0.1
     )
 
 

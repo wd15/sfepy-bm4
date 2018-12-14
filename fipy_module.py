@@ -70,10 +70,11 @@ def get_eq(params, eta, d2f):
 
 
 @curry
-def sweep(calc_d2f, equation, eta, d2f):
+def sweep(dt, calc_d2f, equation, eta, d2f):
     """Do one solve iteration
 
     Args:
+      dt: timestep size
       calc_d2f: function to calculate the free energy second
         derivative
       equation: the equation
@@ -87,7 +88,7 @@ def sweep(calc_d2f, equation, eta, d2f):
     """
     eta.updateOld()
     d2f.setValue(calc_d2f(eta.faceValue))
-    res = equation.sweep(dt=1e-1)
+    res = equation.sweep(dt=dt)
     print("fipy residual:", res)
     return res
 
@@ -131,7 +132,7 @@ def solve(params, set_eta, calc_d2f):
         """
         return pipe(
             dissoc(kwargs, "residuals"),
-            lambda x: sweep(calc_d2f, **x),
+            lambda x: sweep(params['dt'], calc_d2f, **x),
             lambda x: kwargs["residuals"] + (x,),
             assoc(kwargs, "residuals"),
         )

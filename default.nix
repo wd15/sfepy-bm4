@@ -34,6 +34,8 @@ in
       pypkgs.ipywidgets
       pypkgs.appdirs
       pypkgs.click
+      pypkgs.progressbar2
+      pypkgs.pandas
       toml
       fipy
     ];
