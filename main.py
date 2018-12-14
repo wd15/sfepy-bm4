@@ -26,7 +26,7 @@ def get_params():
         kappa=0.29,
         mobility=5.0,
         eta0=0.0065,
-        max_iter=5,
+        fipy_iter=5,
         C11=250.0,
         C12=150.0,
         C44=100.0,
@@ -221,7 +221,7 @@ def sfepy_iter(params, eta):
 
 
 @curry
-def set_eta(params, mesh, vars_):
+def set_eta(eta_value, params, mesh, vars_):
     """Set the intial value of the phase field
 
     Args:
@@ -232,11 +232,16 @@ def set_eta(params, mesh, vars_):
     Returns:
       nothing, this is a setter function
     """
-    vars_["eta"].setValue(1., where=(mesh.x ** 2 + mesh.y ** 2) < params["radius"] ** 2)
+    if eta_value is None:
+        vars_["eta"].setValue(
+            1., where=(mesh.x ** 2 + mesh.y ** 2) < params["radius"] ** 2
+        )
+    else:
+        vars_["eta"].setValue(np.array(eta_value))
 
 
 @curry
-def fipy_iter(params, total_strain):
+def fipy_iter(params, data):
     """One FiPy iteration
 
     Args:
@@ -247,7 +252,9 @@ def fipy_iter(params, total_strain):
       the phase field variable
     """
     return pipe(
-        total_strain, calc_d2f(params), lambda x: fipy_solve(params, set_eta, x)["eta"]
+        dissoc(data, "eta"),
+        calc_d2f(params),
+        lambda x: fipy_solve(params, set_eta(data["eta"]), x)["eta"],
     )
 
 
@@ -263,9 +270,7 @@ def one_iter(params, data):
       dictionary of the phase field and strain fields
     """
     return pipe(
-        dissoc(data, "eta"),
-        fipy_iter(params),
-        lambda x: assoc(sfepy_iter(params, x), "eta", x),
+        data, fipy_iter(params), lambda x: assoc(sfepy_iter(params, x), "eta", x)
     )
 
 

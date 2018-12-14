@@ -142,7 +142,7 @@ def solve(params, set_eta, calc_d2f):
         get_vars(params, set_eta),
         lambda x: assoc(x, "equation", get_eq(params, **x)),
         lambda x: assoc(x, "residuals", ()),
-        iterate_(sweep_wrapper, params["max_iter"]),
+        iterate_(sweep_wrapper, params["fipy_iter"]),
     )
 
 

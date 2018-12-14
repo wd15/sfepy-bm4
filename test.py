@@ -69,7 +69,9 @@ def test_fipy():
         dict(e11=0.0, e12=0.0, e22=0.0),
         lambda x: np.allclose(
             fipy_solve(
-                assoc(get_params(), "max_iter", 2), set_eta, calc_d2f(get_params(), x)
+                assoc(get_params(), "fipy_iter", 2),
+                set_eta(None),
+                calc_d2f(get_params(), x),
             )["residuals"][-1],
             60.309247734253795,
         ),
@@ -81,7 +83,7 @@ def test_combined():
     """
     assert pipe(
         get_params(),
-        assoc(key="max_iter", value=2),
+        assoc(key="fipy_iter", value=2),
         run_main,
         get("eta"),
         np.array,
