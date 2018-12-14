@@ -3,13 +3,17 @@
 
 # pylint: disable=no-value-for-parameter
 
+import os
+import time
+
 import numpy as np
-from toolz.curried import pipe, curry, valmap, dissoc, assoc, get
+from toolz.curried import pipe, curry, valmap, dissoc, assoc, compose, merge, do
 from toolz.curried import map as map_
+import click
 
 from sfepy_module import solve as sfepy_solve
 from fipy_module import solve as fipy_solve
-from fipy_module import to_face_value, iterate_, view
+from fipy_module import to_face_value, iterate_
 from elastic import calc_elastic_d2f_
 
 
@@ -27,12 +31,13 @@ def get_params():
         mobility=5.0,
         eta0=0.0065,
         fipy_iter=5,
-        C11=250.0,
-        C12=150.0,
-        C44=100.0,
+        c11=250.0,
+        c12=150.0,
+        c44=100.0,
         delta=0.0,
         misfit_strain=0.005,
         iterations=2,
+        output_frequency=1,
     )
 
 
@@ -137,9 +142,9 @@ def stiffness_matrix(params):
     """
     return np.array(
         [
-            [params["C11"], params["C12"], 0],
-            [params["C12"], params["C11"], 0],
-            [0, 0, params["C44"]],
+            [params["c11"], params["c12"], 0],
+            [params["c12"], params["c11"], 0],
+            [0, 0, params["c44"]],
         ]
     )
 
@@ -188,7 +193,7 @@ def calc_prestress(params, calc_eta_func, coords):
 
 
 @curry
-def sfepy_iter(params, eta):
+def sfepy_iter(params, data):
     """One Sfepy iteration interpolating from FiPy
 
     Args:
@@ -206,7 +211,7 @@ def sfepy_iter(params, eta):
         return var(coords.swapaxes(0, 1), order=1)
 
     return pipe(
-        eta,
+        data["eta"],
         interpolate,
         lambda x: sfepy_solve(
             calc_stiffness(params, x),
@@ -216,7 +221,7 @@ def sfepy_iter(params, eta):
         )[0],
         lambda x: x.swapaxes(0, 1),
         lambda x: x.reshape(x.shape[0] * x.shape[1], x.shape[2]),
-        lambda x: dict(e11=x[:, 0], e12=x[:, 2], e22=x[:, 1]),
+        lambda x: merge(data, dict(e11=x[:, 0], e12=x[:, 2], e22=x[:, 1])),
     )
 
 
@@ -249,12 +254,13 @@ def fipy_iter(params, data):
       total_strain: dictionary of total strain fields
 
     Returns:
-      the phase field variable
+      updated data dictionary
     """
     return pipe(
         dissoc(data, "eta"),
         calc_d2f(params),
         lambda x: fipy_solve(params, set_eta(data["eta"]), x)["eta"],
+        lambda x: assoc(data, "eta", x),
     )
 
 
@@ -270,11 +276,47 @@ def one_iter(params, data):
       dictionary of the phase field and strain fields
     """
     return pipe(
-        data, fipy_iter(params), lambda x: assoc(sfepy_iter(params, x), "eta", x)
+        data,
+        fipy_iter(params),
+        sfepy_iter(params),
+        lambda x: assoc(x, "step_counter", x["step_counter"] + 1),
     )
 
 
-def run_main(params):
+@curry
+def dump_data(folder, params, data):  # pragma: no cover
+    """Dump data to a file
+    """
+    np.savez_compressed(
+        os.path.join(folder, "data{0}.npz".format(str(data["step_counter"]).zfill(7))),
+        eta=np.array(data["eta"]),
+        e11=np.array(data["e11"]),
+        e22=np.array(data["e22"]),
+        e12=np.array(data["e12"]),
+        step_counter=int(data["step_counter"]),
+        params=params,
+        wall_time=time.time(),
+    )
+
+
+def sequence(*args):
+    """Reverse compose
+    """
+    return compose(*args[::-1])
+
+
+# pylint: disable=invalid-name
+add_options = sequence(
+    lambda x: x.items(),
+    map_(lambda x: click.option("--" + x[0], default=x[1])),
+    lambda x: compose(*x),
+)
+
+
+@click.command()
+@click.option("--folder", default="data", help="name of data directory")
+@add_options(get_params())
+def main(folder, **params):  # pragma: no cover
     """Run the calculation
 
     Args:
@@ -284,12 +326,19 @@ def run_main(params):
     Returns:
       tuple of strain, displacement and stress
     """
-    return pipe(
-        dict(e11=0.0, e12=0.0, e22=0.0, eta=None),
-        iterate_(one_iter(params), params["iterations"]),
-    )
+    if os.path.exists(folder):
+        click.echo("{0} directory already exists, remove to continue".format(folder))
+    else:
+        os.makedirs(folder)
+        output_iter = sequence(
+            iterate_(one_iter(params), params["output_frequency"]),
+            do(dump_data(folder, params)),
+        )
+        pipe(
+            dict(e11=0.0, e12=0.0, e22=0.0, eta=None, step_counter=0),
+            iterate_(output_iter, params["iterations"] // params["output_frequency"]),
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
-    pipe(get_params(), run_main, get("eta"), view)
-    input("stopped")
+    main()

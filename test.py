@@ -10,8 +10,9 @@ from main import (
     fipy_solve,
     get_params,
     calc_d2f,
-    run_main,
     set_eta,
+    iterate_,
+    one_iter,
 )
 
 
@@ -75,6 +76,21 @@ def test_fipy():
             )["residuals"][-1],
             60.309247734253795,
         ),
+    )
+
+
+def run_main(params):
+    """Function to run multiple iterations for testing
+
+    Args:
+      params: dictionary of parameter values
+
+    Returns:
+      the field data
+    """
+    return pipe(
+        dict(e11=0.0, e12=0.0, e22=0.0, eta=None, step_counter=0),
+        iterate_(one_iter(params), params["iterations"]),
     )
 
 

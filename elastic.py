@@ -12,9 +12,9 @@ def term1(params, strain, d2h_value):
         params["delta"]
         * d2h_value
         * (
-            params["C11"] * (strain["e11"] ** 2 + strain["e22"] ** 2)
-            + 2 * params["C12"] * strain["e11"] * strain["e22"]
-            + 4 * params["C44"] * strain["e12"] ** 2
+            params["c11"] * (strain["e11"] ** 2 + strain["e22"] ** 2)
+            + 2 * params["c12"] * strain["e11"] * strain["e22"]
+            + 4 * params["c44"] * strain["e12"] ** 2
         )
     )
 
@@ -23,7 +23,7 @@ def term2(params, strain, dh_value):
     """Second term in expression
     """
     return params["delta"] * dh_value ** 2 * params["misfit_strain"] * (
-        params["C11"] + params["C12"]
+        params["c11"] + params["c12"]
     ) + (strain["e11"] + strain["e22"])
 
 
@@ -34,7 +34,7 @@ def term3(params, h_value, dh_value):
         (1 + params["delta"] * h_value)
         * dh_value ** 2
         * params["misfit_strain"] ** 2
-        * (params["C11"] + params["C12"])
+        * (params["c11"] + params["c12"])
     )
 
 
@@ -45,7 +45,7 @@ def term4(params, strain, h_value, d2h):
         (1 + params["delta"] * h_value)
         * d2h
         * params["misfit_strain"]
-        * (params["C11"] + params["C12"])
+        * (params["c11"] + params["c12"])
         * (strain["e11"] + strain["e22"])
     )
 
