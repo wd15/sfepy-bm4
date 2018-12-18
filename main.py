@@ -163,6 +163,7 @@ def calc_stiffness(params, calc_eta_func, coords):
     Returns:
       n x 3 x 3 stiffness tensor
     """
+
     return (
         stiffness_matrix(params)[None]
         * (1 + params["delta"] * calc_h(calc_eta_func(coords)))[:, None, None]

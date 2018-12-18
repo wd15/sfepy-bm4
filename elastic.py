@@ -22,16 +22,17 @@ def term1(params, strain, d2h_value):
 def term2(params, strain, dh_value):
     """Second term in expression
     """
+
     return params["delta"] * dh_value ** 2 * params["misfit_strain"] * (
         params["c11"] + params["c12"]
-    ) + (strain["e11"] + strain["e22"])
+    ) * (strain["e11"] + strain["e22"])
 
 
 def term3(params, h_value, dh_value):
     """Third term in expression
     """
     return (
-        (1 + params["delta"] * h_value)
+        2 * (1 + params["delta"] * h_value)
         * dh_value ** 2
         * params["misfit_strain"] ** 2
         * (params["c11"] + params["c12"])

@@ -1,13 +1,22 @@
 """View results for benchmark problem 4
 
+To plot the radius of the precipitate in the x direction
+    $ python view.py --folder=data_xxx a_10
+
+To plot the radius of the precipitate in the y direction
+    $ python view.py --folder=data_xxx a_10
+
+To plot the radius of the precipitate in the diagonal direction
+    $ python view.py --folder=data_xxx a_d
+
 # To plot the solid fraction from directory "data_xxx"
 #     $ python view.py --folder data_xxx solid_fraction
 
 # To plot the free energy
 #     $ python view.py --folder data_xxx free_energy
 
-To plot the tip position
-    $ python view.py --folder data_xxx tip_position
+To plot the radius of the precipitate in the xx direction
+    $ python view.py --folder=data_xxx a10
 
 # To view the latest time step
 #     $ python view.py --folder data_xxx view_step --latest
@@ -219,17 +228,33 @@ def read_and_plot(f_calc):
 def calc_contour(arr, lx, nx):
     return pipe(
         lx / nx,
-        lambda dx: np.linspace(dx / 2., dx * (nx - 0.5), nx),
+        lambda dx: np.linspace(-dx * (nx / 2 - 0.5), dx * (nx / 2 - 0.5), nx),
         lambda x: np.meshgrid(x, x),
         lambda x: plt.contour(x[0], x[1], arr.reshape(nx, nx), (0.5,)).collections[0].get_paths()[0].vertices,
         do(lambda x: plt.close())
     )
 
 
-calc_tip_position = sequence(
-    lambda x: calc_contour(x['eta'], x['params'].item()['lx'], x['params'].item()['nx']),
+calc_position_ = lambda x: calc_contour(x['eta'], x['params'].item()['lx'], x['params'].item()['nx'])
+
+
+calc_position_10 = sequence(
+    calc_position_,
     lambda x: np.amax(x[:,0]),
 )
+
+
+calc_position_01 = sequence(
+    calc_position_,
+    lambda x: np.amax(x[:,1]),
+)
+
+
+calc_position_d = sequence(
+    calc_position_,
+    lambda x: np.amax((x[:,0] + x[:, 1]) / np.sqrt(2.))
+)
+
 
 # def f_chem(phase, heat, params):
 #     return -phase**2 / 2 \
@@ -273,11 +298,51 @@ calc_tip_position = sequence(
 
 @cli.command()
 @click.pass_context
-def tip_position(ctx):
-    """Command to plot the tip position versus time
+def a_10(ctx):
+    """Command to plot the radius of the preciptate in the x direction
     """
-    read_and_plot(calc_tip_position)(ctx)
+    read_and_plot(calc_position_10)(ctx)
 
+
+@cli.command()
+@click.pass_context
+def a_01(ctx):
+    """Command to plot the radius of the preciptate in the y direction
+    """
+    read_and_plot(calc_position_01)(ctx)
+
+
+@cli.command()
+@click.pass_context
+def a_d(ctx):
+    """Command to plot the radius of the preciptate in the diagonal direction
+    """
+    read_and_plot(calc_position_d)(ctx)
+
+
+# @cli.command()
+# @click.option('--step', default=0, help='step to view')
+# @click.option('--latest/--no-latest',
+#               default=False,
+#               help='view the latest result available')
+# @click.option('--save/--no-save',
+#               default=False,
+#               help='save the spatial data to a CSV')
+# @click.pass_context
+# def view_step(ctx, step, latest, save):
+#     """Use Matplotlib to view the phase and heat variables
+#     """
+#     return pipe(
+#         get_vars(ctx, step, latest),
+#         do(save_vars(save)),
+#         do(save_contour(save)),
+#         map_(lambda x: Viewer(x, title=x.name).plot()),
+#         do(lambda _: click.pause())
+#     )
+
+# @cli.command()
+# @click.pass_context
+# def plot_contour
 
 # @cli.command()
 # @click.pass_context
