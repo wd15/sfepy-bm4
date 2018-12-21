@@ -23,16 +23,25 @@ Commands:
 import glob
 import os
 import pprint
+import warnings
 
 import numpy as np
 import click
 from toolz.curried import pipe, do, assoc, juxt, get
-import matplotlib.pyplot as plt
 import progressbar
 
-from main import sequence, map_, calc_elastic_f, calc_bulk_f
+warnings.simplefilter("ignore")
 
-# from main import get_mesh, map_, sequence, get_phase, w_func, get_coupling
+# noqa: E402
+import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position;  # noqa: E402
+
+
+from main import (  # pylint: disable=wrong-import-position;  # noqa: E402
+    sequence,
+    map_,
+    calc_elastic_f,
+    calc_bulk_f,
+)
 
 
 @click.group()
@@ -209,6 +218,23 @@ def params(ctx):
         get_filename(1, False, ctx.parent.params["folder"]),
         np.load,
         lambda x: pprint.PrettyPrinter(indent=2).pprint(x["params"].item()),
+    )
+
+
+@cli.command()
+@click.option("--step", default=0, help="step to view")
+@click.option(
+    "--latest/--no-latest", default=False, help="view the latest result available"
+)
+@click.pass_context
+def contour(ctx, step, latest):
+    """Plot the 0.5 contour
+    """
+    pipe(
+        get_filename(step, latest, ctx.parent.params["folder"]),
+        np.load,
+        calc_position_,
+        plot2d,
     )
 
 
