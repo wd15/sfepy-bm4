@@ -15,6 +15,7 @@ from sfepy_module import solve as sfepy_solve
 from fipy_module import solve as fipy_solve
 from fipy_module import to_face_value, iterate_
 from elastic import calc_elastic_d2f_
+from elastic import calc_elastic_f_
 
 
 def get_params():
@@ -38,7 +39,7 @@ def get_params():
         misfit_strain=0.005,
         iterations=2,
         output_frequency=1,
-        dt=0.1
+        dt=0.1,
     )
 
 
@@ -94,31 +95,50 @@ def calc_elastic_d2f(params, total_strain, eta):
     )
 
 
+def calc_elastic_f(params, total_strain, eta):  # pragma: no cover
+    """Calculate the elastic free energy
+    """
+    return calc_elastic_f_(params, total_strain, calc_h(eta))
+
+
+def a_j(j):
+    """The a_j coefficients from the spec
+    """
+    return [
+        0,
+        0,
+        8.072789087,
+        -81.24549382,
+        408.0297321,
+        -1244.129167,
+        2444.046270,
+        -3120.635139,
+        2506.663551,
+        -1151.003178,
+        230.2006355,
+    ][j]
+
+
 def calc_chem_d2f(eta):
     """Calculate the second derivative of the chemical free energy
     """
-
-    def a_j(j):
-        """The a_j coefficients from the spec
-        """
-        return [
-            0,
-            0,
-            8.072789087,
-            -81.24549382,
-            408.0297321,
-            -1244.129167,
-            2444.046270,
-            -3120.635139,
-            2506.663551,
-            -1151.003178,
-            230.2006355,
-        ][j]
 
     def calc_term(j):
         """Calculate a singe term in the free energy sum
         """
         return a_j(j) * j * (j - 1) * eta ** (j - 2)
+
+    return 0.1 * sum(map_(calc_term, range(2, 11)))
+
+
+def calc_bulk_f(eta):  # pragma: no cover
+    """Calculate the bulk free energy
+    """
+
+    def calc_term(j):
+        """Calculate a single term in the bulk free energy
+        """
+        return a_j(j) * eta ** j
 
     return 0.1 * sum(map_(calc_term, range(2, 11)))
 

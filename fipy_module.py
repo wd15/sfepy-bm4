@@ -70,7 +70,7 @@ def get_eq(params, eta, d2f):
 
 
 @curry
-def sweep(dt, calc_d2f, equation, eta, d2f):
+def sweep(delta_t, calc_d2f, equation, eta, d2f):
     """Do one solve iteration
 
     Args:
@@ -88,7 +88,7 @@ def sweep(dt, calc_d2f, equation, eta, d2f):
     """
     eta.updateOld()
     d2f.setValue(calc_d2f(eta.faceValue))
-    res = equation.sweep(dt=dt)
+    res = equation.sweep(dt=delta_t)
     print("fipy residual:", res)
     return res
 
@@ -132,7 +132,7 @@ def solve(params, set_eta, calc_d2f):
         """
         return pipe(
             dissoc(kwargs, "residuals"),
-            lambda x: sweep(params['dt'], calc_d2f, **x),
+            lambda x: sweep(params["dt"], calc_d2f, **x),
             lambda x: kwargs["residuals"] + (x,),
             assoc(kwargs, "residuals"),
         )

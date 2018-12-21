@@ -74,7 +74,7 @@ def test_fipy():
                 set_eta(None),
                 calc_d2f(get_params(), x),
             )["residuals"][-1],
-            60.309247734253795,
+            60.736145628467526,
         ),
     )
 
