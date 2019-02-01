@@ -27,7 +27,7 @@ import warnings
 
 import numpy as np
 import click
-from toolz.curried import pipe, do, assoc, juxt, get
+from toolz.curried import pipe, do, assoc, juxt, get, take_nth, curry
 import progressbar
 
 warnings.simplefilter("ignore")
@@ -47,12 +47,15 @@ from main import (  # pylint: disable=wrong-import-position;  # noqa: E402
 @click.group()
 @click.option(
     "--folder", default="data", help="the name of the data directory to parse"
+
 )
+@click.option("--frequency", default=1, help="the display frequency")
 @click.pass_context
-def cli(ctx, folder):
+def cli(ctx, folder, frequency):
     """Use a group function to allow subcommands.
     """
     ctx.params["folder"] = folder
+    ctx.params["frequency"] = frequency
 
 
 def get_filename(step, latest, folder):
@@ -89,14 +92,17 @@ def pbar(items):
     pbar_.finish()
 
 
-def read_and_calc(f_calc):
+@curry
+def read_and_calc(f_calc, ctx):
     """Read in the data and return a result
     """
-    return sequence(
-        lambda x: x.parent.params["folder"],
+    return pipe(
+        ctx.parent.params["folder"],
         lambda x: os.path.join(x, "data*.npz"),
         glob.glob,
         sorted,
+        take_nth(ctx.parent.params["frequency"]),
+        list,
         pbar,
         map_(sequence(np.load, f_calc)),
         list,
