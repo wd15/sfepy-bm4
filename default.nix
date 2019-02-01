@@ -39,9 +39,9 @@ in
       toml
       fipy
     ];
-    src=./.;
-    catchConflicts=false;
-    doCheck=false;
+    src = builtins.toString ./.;
+    catchConflicts = false;
+    doCheck = false;
     preShellHook = ''
       jupyter nbextension install --py widgetsnbextension --user
       jupyter nbextension enable widgetsnbextension --user --py
