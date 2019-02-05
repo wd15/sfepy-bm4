@@ -29,25 +29,27 @@ import numpy as np
 import click
 from toolz.curried import pipe, do, assoc, juxt, get, take_nth, curry
 import progressbar
+import pandas
+
 
 warnings.simplefilter("ignore")
-
 # noqa: E402
 import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position;  # noqa: E402
-
-
 from main import (  # pylint: disable=wrong-import-position;  # noqa: E402
     sequence,
     map_,
     calc_elastic_f,
     calc_bulk_f,
+    set_eta,
 )
+
+# pylint: disable=wrong-import-position
+from fipy_module import get_mesh, get_vars  # noqa: E402
 
 
 @click.group()
 @click.option(
     "--folder", default="data", help="the name of the data directory to parse"
-
 )
 @click.option("--frequency", default=1, help="the display frequency")
 @click.pass_context
@@ -190,11 +192,15 @@ def elastic_free_energy(ctx):
     read_and_plot(calc_elastic_free_energy)(ctx)
 
 
+calc_dx2 = lambda x: (x["lx"] / x["nx"]) ** 2
+
+
 calc_elastic_free_energy = sequence(
     lambda x: assoc(x, "params", x["params"].item()),
     lambda x: assoc(x, "dx", x["params"]["lx"] / x["params"]["nx"]),
     lambda x: assoc(x, "total_strain", dict(e11=x["e11"], e22=x["e22"], e12=x["e12"])),
-    lambda x: calc_elastic_f(x["params"], x["total_strain"], x["eta"]) * x["dx"] ** 2,
+    lambda x: calc_elastic_f(x["params"], x["total_strain"], x["eta"])
+    * calc_dx2(x["params"]),
     np.sum,
 )
 
@@ -209,9 +215,91 @@ def bulk_free_energy(ctx):
 
 calc_bulk_free_energy = sequence(
     lambda x: assoc(x, "params", x["params"].item()),
-    lambda x: assoc(x, "dx", x["params"]["lx"] / x["params"]["nx"]),
-    lambda x: calc_bulk_f(x["eta"]) * x["dx"] ** 2,
+    lambda x: calc_bulk_f(x["eta"]) * calc_dx2(x["params"]),
     np.sum,
+)
+
+
+@cli.command()
+@click.pass_context
+def gradient_free_energy(ctx):
+    """Command to plot the gradient free energy
+    """
+    read_and_plot(calc_gradient_free_energy)(ctx)
+
+
+def calc_gradient_free_energy(data):
+    """Calculate the gradient free energy for one time step
+
+    Args:
+      data: dictionary of data from a output file for given time step
+
+    Returns:
+      a float representing the gradient free energy for a given time
+      step
+    """
+    func = sequence(
+        lambda x: get_vars(x, set_eta(data["eta"]), get_mesh(x)),
+        get("eta"),
+        lambda x: x.grad.mag ** 2,
+    )
+    return pipe(
+        data["params"].item(),
+        lambda x: assoc(x, "dx", x["lx"] / x["nx"]),
+        lambda x: func(x) * (x["kappa"] / 2) * calc_dx2(x),
+        np.array,
+        np.sum,
+    )
+
+
+@cli.command()
+@click.pass_context
+def total_free_energy(ctx):
+    """Command to plot the gradient free energy
+    """
+    read_and_plot(calc_total_free_energy)(ctx)
+
+
+calc_total_free_energy = sequence(
+    juxt(calc_bulk_free_energy, calc_gradient_free_energy, calc_elastic_free_energy),
+    sum,
+)
+
+
+@cli.command()
+@click.pass_context
+def total_area(ctx):
+    """Command to plot the gradient free energy
+    """
+    read_and_plot(calc_total_area)(ctx)
+
+
+calc_total_area = sequence(lambda x: x["eta"] * calc_dx2(x["params"].item()), np.sum)
+
+
+@cli.command()
+@click.pass_context
+def g_el(ctx):
+    """Command to plot the gradient free energy
+    """
+    read_and_plot(calc_g_el)(ctx)
+
+
+calc_g_el = sequence(
+    juxt(calc_elastic_free_energy, calc_total_area), lambda x: x[1] / x[0]
+)
+
+
+@cli.command()
+@click.pass_context
+def g_grad(ctx):
+    """Command to plot the gradient free energy
+    """
+    read_and_plot(calc_g_grad)(ctx)
+
+
+calc_g_grad = sequence(
+    juxt(calc_gradient_free_energy, calc_total_area), lambda x: x[1] / x[0]
 )
 
 
@@ -242,6 +330,78 @@ def contour(ctx, step, latest):
         calc_position_,
         plot2d,
     )
+
+
+@cli.command()
+@click.pass_context
+def save_time_data(ctx):
+    """Dump all the time data to a CSV dat file
+
+    All the time data with each column a differnt qunatity and each
+    row a different time step.
+
+    Args:
+      ctx: the Click context from the base command
+    """
+    read_and_save(
+        "time.csv",
+        [
+            "time",
+            "a_01",
+            "a_10",
+            "a_d",
+            "elastic_free_energy",
+            "gradient_free_energy",
+            "bulk_free_energy",
+            "precipitate_area",
+        ],
+        juxt(
+            calc_elapsed_time,
+            calc_position_01,
+            calc_position_10,
+            calc_position_d,
+            calc_elastic_free_energy,
+            calc_gradient_free_energy,
+            calc_bulk_free_energy,
+            calc_total_area,
+        ),
+    )(ctx)
+
+
+def calc_elapsed_time(data):
+    """Calculate the elapsed time
+
+    Given the data dictionary from on time step, use the step count and time step size
+    to calculate the elapsed time
+
+    Args:
+      data: the data dictionary from one output file
+
+    Retuns:
+      the elapsed timeimport ipdb; ipdb.set_trace()
+    """
+    return data["step_counter"] * data["params"].item()["dt"]
+
+
+def read_and_save(filename, column_names, f_calc):
+    """Read in a file and save data to CSV
+    """
+    return sequence(read_and_calc(f_calc), save2d(filename, column_names))
+
+
+@curry
+def save2d(filename, column_names, data):
+    """Save data to a CSV file
+
+    Args:
+      filename: the namve of the CSV dile
+      column_names: names of the data columns
+      data: 2D data arrys with columns in same oreder as column_names
+    """
+    pandas.DataFrame(dict(zip(column_names, data.transpose()))).to_csv(
+        filename, index=False
+    )
+    click.echo("CSV file written to {0}".format(filename))
 
 
 if __name__ == "__main__":
