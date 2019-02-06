@@ -352,7 +352,7 @@ def save_time_data(ctx):
             "a_d",
             "elastic_free_energy",
             "gradient_free_energy",
-            "bulk_free_energy",
+            "total_free_energy",
             "precipitate_area",
         ],
         juxt(
@@ -362,7 +362,7 @@ def save_time_data(ctx):
             calc_position_d,
             calc_elastic_free_energy,
             calc_gradient_free_energy,
-            calc_bulk_free_energy,
+            calc_total_free_energy,
             calc_total_area,
         ),
     )(ctx)
