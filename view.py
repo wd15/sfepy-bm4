@@ -274,7 +274,7 @@ def total_area(ctx):
     read_and_plot(calc_total_area)(ctx)
 
 
-calc_total_area = sequence(lambda x: x["eta"] * calc_dx2(x["params"].item()), np.sum)
+calc_total_area = sequence(lambda x: (x["eta"] > 0.5) * calc_dx2(x["params"].item()), np.sum)
 
 
 @cli.command()
@@ -286,7 +286,7 @@ def g_el(ctx):
 
 
 calc_g_el = sequence(
-    juxt(calc_elastic_free_energy, calc_total_area), lambda x: x[1] / x[0]
+    juxt(calc_elastic_free_energy, calc_total_area), lambda x: x[0] / x[1] * 400**2
 )
 
 
@@ -299,7 +299,7 @@ def g_grad(ctx):
 
 
 calc_g_grad = sequence(
-    juxt(calc_gradient_free_energy, calc_total_area), lambda x: x[1] / x[0]
+    juxt(calc_gradient_free_energy, calc_total_area), lambda x: x[0] / x[1] * 400**2
 )
 
 
