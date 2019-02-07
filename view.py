@@ -60,6 +60,7 @@ def cli(ctx, folder, frequency):
     ctx.params["frequency"] = frequency
 
 
+@curry
 def get_filename(step, latest, folder):
     """Get the filename given the step
     """
@@ -336,6 +337,31 @@ def contour(ctx, step, latest):
 
 @cli.command()
 @click.pass_context
+@click.option('--step', default=0, help='step to view')
+@click.option('--latest/--no-latest',
+              default=True,
+              help='view the latest result available')
+def save_contour(ctx, step, latest):
+    """Dump the contour data to CSV file
+
+    All the data in x and y columns
+
+    Args:
+      ctx: the Click context from the base command
+      step: the step to plot
+      latest: whether to plot the latest step
+    """
+    sequence(
+        lambda x: x.parent.params["folder"],
+        get_filename(step, latest),
+        np.load,
+        calc_position_,
+        save2d("contour.csv", ["x", "y"])
+    )(ctx)
+
+
+@cli.command()
+@click.pass_context
 def save_time_data(ctx):
     """Dump all the time data to a CSV dat file
 
@@ -370,6 +396,9 @@ def save_time_data(ctx):
     )(ctx)
 
 
+
+
+
 def calc_elapsed_time(data):
     """Calculate the elapsed time
 
@@ -398,7 +427,7 @@ def save2d(filename, column_names, data):
     Args:
       filename: the namve of the CSV dile
       column_names: names of the data columns
-      data: 2D data arrys with columns in same oreder as column_names
+      data: 2D data arrys with columns in same order as column_names
     """
     pandas.DataFrame(dict(zip(column_names, data.transpose()))).to_csv(
         filename, index=False
