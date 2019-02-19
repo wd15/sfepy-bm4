@@ -209,7 +209,7 @@ calc_elastic_free_energy = sequence(
 @cli.command()
 @click.pass_context
 def bulk_free_energy(ctx):
-    """Command to plot the elastic free energy
+    """Command to plot the bulk free energy
     """
     read_and_plot(calc_bulk_free_energy)(ctx)
 
@@ -256,7 +256,7 @@ def calc_gradient_free_energy(data):
 @cli.command()
 @click.pass_context
 def total_free_energy(ctx):
-    """Command to plot the gradient free energy
+    """Command to plot the total free energy
     """
     read_and_plot(calc_total_free_energy)(ctx)
 
@@ -270,7 +270,7 @@ calc_total_free_energy = sequence(
 @cli.command()
 @click.pass_context
 def total_area(ctx):
-    """Command to plot the gradient free energy
+    """Command to plot the precipitate area
     """
     read_and_plot(calc_total_area)(ctx)
 
@@ -283,7 +283,7 @@ calc_total_area = sequence(
 @cli.command()
 @click.pass_context
 def g_el(ctx):
-    """Command to plot the gradient free energy
+    """Command to plot the normalized elastic free energy
     """
     read_and_plot(calc_g_el)(ctx)
 
@@ -296,7 +296,7 @@ calc_g_el = sequence(
 @cli.command()
 @click.pass_context
 def g_grad(ctx):
-    """Command to plot the gradient free energy
+    """Command to plot the normalized gradient free energy
     """
     read_and_plot(calc_g_grad)(ctx)
 
